@@ -16,6 +16,15 @@ const onxrloaded = () => {
   const uiManager = new UIManager(gameState)
 
   let isFaceMode = false
+  let pendingRun = null
+
+  window.addEventListener('stopxr', () => {
+    if (pendingRun) {
+      const runFn = pendingRun
+      pendingRun = null
+      runFn()
+    }
+  })
 
   // Configure both controllers upfront
   XR8.XrController.configure({
@@ -23,7 +32,7 @@ const onxrloaded = () => {
   })
 
   XR8.FaceController.configure({
-    meshGeometry: [],
+    meshGeometry: [XR8.FaceController.MeshGeometry.FACE],
     maxDetections: 1,
   })
 
@@ -67,15 +76,22 @@ const onxrloaded = () => {
   const startMascotMode = () => {
     hideMenu()
     if (isFaceMode) {
-      XR8.pause()
-      XR8.removeCameraPipelineModule(faceController.name)
-      XR8.removeCameraPipelineModule(maskModule.name)
-      XR8.XrController.configure({
-        imageTargetData: [targetAtomic, targetBackPower]
-      })
-      XR8.addCameraPipelineModule(xrController)
-      XR8.addCameraPipelineModule(mascotModule)
-      XR8.resume()
+      pendingRun = () => {
+        XR8.removeCameraPipelineModule(faceController.name)
+        XR8.removeCameraPipelineModule(maskModule.name)
+        XR8.XrController.configure({
+          imageTargetData: [targetAtomic, targetBackPower]
+        })
+        XR8.addCameraPipelineModule(xrController)
+        XR8.addCameraPipelineModule(mascotModule)
+        XR8.run({
+          canvas: document.getElementById('camerafeed'),
+          cameraConfig: {
+            direction: XR8.XrConfig.camera().BACK
+          }
+        })
+      }
+      XR8.stop()
       isFaceMode = false
     }
     uiManager.showInstruction('Scan the Mascot Decal to begin')
@@ -84,12 +100,19 @@ const onxrloaded = () => {
   const startMaskMode = () => {
     hideMenu()
     if (!isFaceMode) {
-      XR8.pause()
-      XR8.removeCameraPipelineModule(xrController.name)
-      XR8.removeCameraPipelineModule(mascotModule.name)
-      XR8.addCameraPipelineModule(faceController)
-      XR8.addCameraPipelineModule(maskModule)
-      XR8.resume()
+      pendingRun = () => {
+        XR8.removeCameraPipelineModule(xrController.name)
+        XR8.removeCameraPipelineModule(mascotModule.name)
+        XR8.addCameraPipelineModule(faceController)
+        XR8.addCameraPipelineModule(maskModule)
+        XR8.run({
+          canvas: document.getElementById('camerafeed'),
+          cameraConfig: {
+            direction: XR8.XrConfig.camera().FRONT
+          }
+        })
+      }
+      XR8.stop()
       isFaceMode = true
     }
     uiManager.showInstruction('Point the camera at your face!')
@@ -103,7 +126,12 @@ const onxrloaded = () => {
   })
 
   // Start XR8 (mascot mode by default, menu shown on top)
-  XR8.run({canvas: document.getElementById('camerafeed')})
+  XR8.run({
+    canvas: document.getElementById('camerafeed'),
+    cameraConfig: {
+      direction: XR8.XrConfig.camera().BACK
+    }
+  })
 }
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
