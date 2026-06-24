@@ -61,11 +61,18 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         // Print model bounds size for visual scaling reference
         const box = new THREE.Box3().setFromObject(mascotModel)
         const size = box.getSize(new THREE.Vector3())
-        console.log(`[AR] Mascot model loaded, bounds size:`, size)
+        console.log(`[AR] Mascot model loaded, raw bounds size:`, size)
 
-        // Set scale to standard human size (1.8m-2m height)
-        // Adjusting based on raw size. If bounds size height is ~2m, scale is 0.85
-        mascotModel.scale.set(0.85, 0.85, 0.85)
+        // Set scale dynamically to standard human size (1.8m height)
+        const rawHeight = size.y
+        if (rawHeight > 0) {
+          const targetHeight = 1.8
+          const scaleFactor = targetHeight / rawHeight
+          mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
+          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight}m`)
+        } else {
+          mascotModel.scale.set(1.5, 1.5, 1.5) // Fallback if height check fails
+        }
         mascotModel.visible = false // Hide until decal is scanned
         
         // Enable shadow casting for meshes in the model
@@ -167,21 +174,29 @@ export const initScenePipelineModule = (gameState, uiManager) => {
               placeholderRing.visible = false
             }
 
-            // 1. Copy the target decal position and rotation
-            mascotModel.position.copy(position)
-            mascotModel.quaternion.copy(rotation)
+            // 1. Get camera world position
+            const cameraPos = new THREE.Vector3()
+            xrCamera.getWorldPosition(cameraPos)
+
+            // 2. Calculate direction from camera to target projected on the horizontal floor plane (Y = 0)
+            const targetPos = new THREE.Vector3().copy(position)
+            const dir = new THREE.Vector3().subVectors(targetPos, cameraPos)
+            dir.y = 0
+            dir.normalize()
+
+            // 3. Set the spawn position 1.5 meters behind the target (away from the camera)
+            const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, 1.5)
             
-            // 2. Rotate the model to stand upright perpendicular to the decal surface
-            mascotModel.rotation.x = Math.PI / 2
+            // 4. Ground the mascot at the same height as the target (the floor)
+            spawnPos.y = targetPos.y
+
+            mascotModel.position.copy(spawnPos)
+
+            // 5. Look at the camera, but lock the Y-axis so the mascot stands perfectly upright
+            const lookTarget = new THREE.Vector3(cameraPos.x, spawnPos.y, cameraPos.z)
+            mascotModel.lookAt(lookTarget)
             
-            // 3. Offset the mascot backward (along Z direction) by 1.5 meters
-            // This leaves the floor space around the card free for the fan to stand in.
-            mascotModel.translateZ(-1.5)
-            
-            // 4. Align the mascot to face the camera Y-axis for optimal selfie framing
-            alignMascotToCamera()
-            
-            // 5. Make visible
+            // 6. Make visible
             mascotModel.visible = true
             console.log(`[AR] Mascot placed in world space at:`, mascotModel.position)
 
