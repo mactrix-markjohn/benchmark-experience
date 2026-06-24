@@ -95,13 +95,16 @@ export class UIManager {
     const gl = document.getElementById('camerafeed')
     if (!video || !gl) return
 
+    // Use the screen dimensions so video and WebGL layers align perfectly
     const c = document.createElement('canvas')
     const ctx = c.getContext('2d')
-    c.width = video.videoWidth || window.innerWidth
-    c.height = video.videoHeight || window.innerHeight
+    const w = gl.width
+    const h = gl.height
+    c.width = w
+    c.height = h
 
-    ctx.drawImage(video, 0, 0, c.width, c.height)
-    ctx.drawImage(gl, 0, 0, c.width, c.height)
+    ctx.drawImage(video, 0, 0, w, h)
+    ctx.drawImage(gl, 0, 0, w, h)
 
     this.showPreview(c.toDataURL('image/jpeg'), c)
   }
