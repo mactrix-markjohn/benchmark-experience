@@ -342,6 +342,26 @@
       text-shadow: 0 0 5px var(--color-secondary-glow);
     }
 
+    /* "Take Selfie" button — shown after mascot is placed on floor */
+    #selfie-btn-container {
+      position: absolute;
+      bottom: 120px;
+      left: 0;
+      width: 100%;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    #selfie-btn {
+      pointer-events: auto;
+      max-width: 280px;
+      font-size: 1.1rem;
+      animation: pulse-cyan 2s infinite;
+    }
+
     /* Shutter button style */
     #shutter-container {
       position: absolute;
@@ -611,6 +631,11 @@
       </div>
       <button class="modal-btn" id="onboarding-btn">START EXPERIENCE</button>
     </div>
+  </div>
+
+  <!-- "Take Selfie" Button (shown after mascot placed on floor) -->
+  <div id="selfie-btn-container">
+    <button class="modal-btn" id="selfie-btn">Take Selfie</button>
   </div>
 
   <!-- Camera Shutter Button Overlay -->

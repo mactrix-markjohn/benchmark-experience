@@ -1,55 +1,46 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-// 8th Wall normalizes the larger dimension of flat image targets to 1.0 unit.
-// The physical book cover is approximately 0.21m in height.
-// Therefore, 1.0 Three.js unit = 0.21 physical meters.
 const PHYSICAL_METERS_PER_UNIT = 0.21
-const UNITS_PER_METER = 1.0 / PHYSICAL_METERS_PER_UNIT // ~4.76 units/meter
+const UNITS_PER_METER = 1.0 / PHYSICAL_METERS_PER_UNIT
 
-// Helper to define 3D assets and coordinate target scans with game state & UI
+const STATE = {SCANNING: 0, PLACING: 1, PLACED: 2, SELFIE: 3}
+
 export const initScenePipelineModule = (gameState, uiManager) => {
-  let mascotPlaced = false
+  let currentState = STATE.SCANNING
   let mascotModel = null
   let placeholderRing = null
-  let mixer = null
+  let groundPlane = null
   let rawMinY = 0
   let scaleFactor = 1.0
   const mixers = []
   const clock = new THREE.Clock()
+  const raycaster = new THREE.Raycaster()
+  const screenCenter = new THREE.Vector2(0, 0)
 
-  // Track 8th Wall scene coordinates
   let xrScene = null
   let xrCamera = null
-
-  // Selfie mode state
-  let selfieMode = false
   let selfieAnimFrame = null
 
-  // Populates lighting, shadows, and default placeholder geometries
   const initXrScene = ({scene, camera, renderer}) => {
     renderer.preserveDrawingBuffer = true
     xrScene = scene
     xrCamera = camera
     renderer.shadowMap.enabled = true
 
-    // Add lights for realistic shadows and GLB reflections
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5)
     directionalLight.position.set(5, 12, 8)
     directionalLight.castShadow = true
-    
-    // Configure shadow maps for better quality
     directionalLight.shadow.mapSize.width = 1024
     directionalLight.shadow.mapSize.height = 1024
     directionalLight.shadow.camera.near = 0.5
     directionalLight.shadow.camera.far = 25
     scene.add(directionalLight)
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
-    scene.add(ambientLight)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
 
-    // Create a neon tracking placeholder ring
-    const ringGeo = new THREE.RingGeometry(0.2, 0.25, 32)
+    // Ground reticle ring for placement mode
+    const ringGeo = new THREE.RingGeometry(0.4, 0.5, 48)
     ringGeo.rotateX(-Math.PI / 2)
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x00f2fe,
@@ -61,115 +52,124 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     placeholderRing.visible = false
     scene.add(placeholderRing)
 
-    // Load the life-size mascot asynchronously
+    // Invisible ground plane for raycasting tap-to-place
+    const groundGeo = new THREE.PlaneGeometry(500, 500)
+    groundGeo.rotateX(-Math.PI / 2)
+    const groundMat = new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide})
+    groundPlane = new THREE.Mesh(groundGeo, groundMat)
+    groundPlane.position.y = 0
+    scene.add(groundPlane)
+
+    // Load mascot model
     const loader = new GLTFLoader()
-    const modelUrl = 'assets/AstronautThumbUp.glb'
-    
     loader.load(
-      modelUrl,
+      'assets/AstronautThumbUp.glb',
       (gltf) => {
         mascotModel = gltf.scene
-        
-        // Print model bounds size for visual scaling reference
+
         mascotModel.updateMatrixWorld(true)
         const box = new THREE.Box3().setFromObject(mascotModel)
         const size = box.getSize(new THREE.Vector3())
         rawMinY = box.min.y
-        console.log(`[AR] Mascot model loaded, raw bounds size:`, size, `rawMinY:`, rawMinY)
+        console.log('[AR] Mascot loaded, bounds:', size, 'rawMinY:', rawMinY)
 
-        // Set scale to 2.6m tall (life-size + 0.8m larger)
         const rawHeight = size.y
         if (rawHeight > 0) {
           const targetHeight = 2.6 * UNITS_PER_METER
           scaleFactor = targetHeight / rawHeight
-          mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
-          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~2.6m)`)
         } else {
           scaleFactor = 6.0
-          mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
         }
-        mascotModel.visible = false // Hide until decal is scanned
-        
-        // Enable shadow casting for meshes in the model
+        mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
+        mascotModel.visible = false
+
         mascotModel.traverse((node) => {
           if (node.isMesh) {
             node.castShadow = true
             node.receiveShadow = true
           }
         })
-        
-        scene.add(mascotModel) // Add directly to world scene for SLAM co-existence
 
-        // Prepare GLTF skeletal animation
+        scene.add(mascotModel)
+
         if (gltf.animations && gltf.animations.length > 0) {
-          mixer = new THREE.AnimationMixer(mascotModel)
-          const action = mixer.clipAction(gltf.animations[0])
-          action.play()
+          const mixer = new THREE.AnimationMixer(mascotModel)
+          mixer.clipAction(gltf.animations[0]).play()
           mixers.push(mixer)
-          console.log(`[AR] Prepared animation "${gltf.animations[0].name}"`)
         }
       },
       undefined,
-      (error) => {
-        console.error(`Error loading mascot model ${modelUrl}:`, error)
-      }
+      (err) => console.error('Error loading mascot:', err)
     )
 
     camera.position.set(0, 2, 3)
   }
 
-  // Estimate how high the phone is held above the floor (~1.3m typical)
-  const CAMERA_HEIGHT_M = 1.3
-  const CAMERA_HEIGHT_UNITS = CAMERA_HEIGHT_M * UNITS_PER_METER
-
-  // Helper to update the mascot's position and rotation relative to the target pose
-  const updateMascotPose = (position, rotation) => {
-    if (!mascotModel || !xrCamera) return
-
+  // Calibrate ground plane height from the first few frames of camera data
+  let groundCalibrated = false
+  const calibrateGround = () => {
+    if (groundCalibrated || !xrCamera || !groundPlane) return
     const cameraPos = new THREE.Vector3()
     xrCamera.getWorldPosition(cameraPos)
-
-    // Estimate the floor Y: camera is ~1.3m above the ground
-    const floorY = cameraPos.y - CAMERA_HEIGHT_UNITS
-
-    // Direction from camera to target on the horizontal plane
-    const targetPos = new THREE.Vector3().copy(position)
-    const dir = new THREE.Vector3().subVectors(targetPos, cameraPos)
-    dir.y = 0
-    dir.normalize()
-
-    // Place mascot 1.5m past the target (away from the camera) so the user
-    // sees it face-to-face at a comfortable distance
-    const offsetDistance = 1.5 * UNITS_PER_METER
-    const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
-
-    // Ground feet on the estimated floor
-    spawnPos.y = floorY - (rawMinY * scaleFactor)
-
-    mascotModel.position.copy(spawnPos)
-
-    // Face the camera, locked upright on Y-axis
-    const lookTarget = new THREE.Vector3(cameraPos.x, spawnPos.y, cameraPos.z)
-    mascotModel.lookAt(lookTarget)
+    // 8th Wall SLAM starts with camera at ~eye level.
+    // Estimate floor as 1.3m below current camera position.
+    const estimatedFloor = cameraPos.y - (1.3 * UNITS_PER_METER)
+    groundPlane.position.y = estimatedFloor
+    groundCalibrated = true
+    console.log('[AR] Ground calibrated at Y:', estimatedFloor, 'camera Y:', cameraPos.y)
   }
 
-  // Transition from back-camera AR to front-camera selfie mode
+  // Place mascot at a world position on the floor
+  const placeMascotAt = (floorPoint) => {
+    if (!mascotModel || !xrCamera) return
+
+    mascotModel.position.copy(floorPoint)
+    mascotModel.position.y -= rawMinY * scaleFactor
+
+    // Face the camera
+    const cameraPos = new THREE.Vector3()
+    xrCamera.getWorldPosition(cameraPos)
+    mascotModel.lookAt(new THREE.Vector3(cameraPos.x, mascotModel.position.y, cameraPos.z))
+
+    mascotModel.visible = true
+    if (placeholderRing) placeholderRing.visible = false
+
+    currentState = STATE.PLACED
+    uiManager.showSelfieButton()
+    uiManager.updateClue('The mascot is placed! Tap "Take Selfie" to snap a photo with it.')
+  }
+
+  // Handle tap during placement mode
+  const handlePlacementTap = (e) => {
+    if (currentState !== STATE.PLACING || !mascotModel || !xrCamera || !groundPlane) return
+
+    const touch = e.touches ? e.touches[0] : e
+    const tapNDC = new THREE.Vector2(
+      (touch.clientX / window.innerWidth) * 2 - 1,
+      -(touch.clientY / window.innerHeight) * 2 + 1
+    )
+
+    raycaster.setFromCamera(tapNDC, xrCamera)
+    const hits = raycaster.intersectObject(groundPlane)
+    if (hits.length > 0) {
+      placeMascotAt(hits[0].point)
+    }
+  }
+
+  // Transition to front-camera selfie mode
   const startSelfieMode = () => {
-    selfieMode = true
+    currentState = STATE.SELFIE
 
     const {scene, camera, renderer} = XR8.Threejs.xrScene()
 
     XR8.pause()
 
-    // Transparent background so the front-camera video shows through the canvas
     renderer.setClearColor(0x000000, 0)
 
-    // Re-light for selfie framing (front-lit)
     const selfieLight = new THREE.DirectionalLight(0xffffff, 1.0)
     selfieLight.position.set(0, 5, 10)
     scene.add(selfieLight)
 
-    // Set up a fixed perspective camera for selfie composition
     const mascotH = 2.6 * UNITS_PER_METER
     camera.fov = 50
     camera.aspect = window.innerWidth / window.innerHeight
@@ -179,7 +179,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     camera.position.set(0, mascotH * 0.45, mascotH * 1.4)
     camera.lookAt(mascotH * 0.12, mascotH * 0.35, 0)
 
-    // Position mascot to the right side of the frame, facing the camera at a slight angle
     if (mascotModel) {
       mascotModel.position.set(mascotH * 0.25, 0, 0)
       mascotModel.rotation.set(0, -Math.PI / 6, 0)
@@ -188,9 +187,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
 
     if (placeholderRing) placeholderRing.visible = false
 
-    // Custom render loop (XR8 onUpdate no longer fires when paused)
     const renderSelfieFrame = () => {
-      if (!selfieMode) return
+      if (currentState !== STATE.SELFIE) return
       const delta = clock.getDelta()
       mixers.forEach((m) => m.update(delta))
       renderer.clear()
@@ -200,128 +198,86 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     renderSelfieFrame()
   }
 
+  // Expose selfie trigger for the UI manager
+  uiManager._startSelfieMode = startSelfieMode
+
   return {
     name: 'scavenger-hunt-3d-renderer',
 
-    // Runs once when the camera feed starts and the canvas is bound
     onStart: ({canvas}) => {
       const {scene, camera, renderer} = XR8.Threejs.xrScene()
-
       initXrScene({scene, camera, renderer})
 
-      // Sync 8th Wall coordinate system with cameras initial offset
       XR8.XrController.updateCameraProjectionMatrix({
         origin: camera.position,
         facing: camera.quaternion
       })
+
+      // Listen for taps on the canvas for mascot placement
+      canvas.addEventListener('touchstart', handlePlacementTap)
     },
 
-    // Runs every tick (frame update) for animations
     onUpdate: () => {
-      // Spin the loading placeholder ring
-      if (placeholderRing && placeholderRing.visible) {
-        placeholderRing.rotation.y += 0.015
-      }
-
-      // Update animation mixers with clock delta time
       const delta = clock.getDelta()
-      mixers.forEach((mixer) => {
-        mixer.update(delta)
-      })
+      mixers.forEach((m) => m.update(delta))
+
+      // Calibrate ground plane once SLAM has started
+      calibrateGround()
+
+      // During placement mode, project reticle onto ground from screen center
+      if (currentState === STATE.PLACING && placeholderRing && xrCamera && groundPlane) {
+        raycaster.setFromCamera(screenCenter, xrCamera)
+        const hits = raycaster.intersectObject(groundPlane)
+        if (hits.length > 0) {
+          placeholderRing.position.copy(hits[0].point)
+          placeholderRing.position.y += 0.02
+          placeholderRing.visible = true
+        } else {
+          placeholderRing.visible = false
+        }
+        placeholderRing.rotation.y += 0.01
+      }
     },
 
-    // Register target events listeners directly through the pipeline module listeners
     listeners: [
       {
         event: 'reality.imagefound',
         process: (event) => {
-          const detail = event.detail || event
-          const {name, position, rotation} = detail
-          
+          if (currentState !== STATE.SCANNING) return
+          const {name} = event.detail || event
           if (name !== 'image-target-atomic') return
+          if (!mascotModel) return
 
-          // Show placeholder loading ring if model is not loaded yet
-          if (!mascotModel && placeholderRing) {
-            placeholderRing.position.copy(position)
-            placeholderRing.quaternion.copy(rotation)
-            placeholderRing.visible = true
-            return
-          }
+          // Award points once
+          const reward = gameState.scanTarget(name)
+          if (reward) {
+            uiManager.updateHUD(
+              reward.totalScore,
+              reward.progress,
+              gameState.totalTargets,
+              reward.nextClue
+            )
 
-          if (mascotModel) {
-            if (placeholderRing) {
-              placeholderRing.visible = false
-            }
-
-            // Continuously update mascot pose to keep it locked to the floor
-            updateMascotPose(position, rotation)
-            
-            // Make visible
-            mascotModel.visible = true
-
-            // Trigger score rewards ONLY ONCE when first found
-            if (!mascotPlaced) {
-              mascotPlaced = true
-              console.log(`[AR] Mascot first placed in world space at:`, mascotModel.position)
-
-              // Award points and check completions via game state
-              const reward = gameState.scanTarget(name)
-              if (reward) {
-                uiManager.updateHUD(
-                  reward.totalScore,
-                  reward.progress,
-                  gameState.totalTargets,
-                  reward.nextClue
-                )
-
-                // Open success scan modal overlay
-                uiManager.showFoundModal(
-                  reward.title,
-                  reward.description,
-                  reward.points,
-                  () => {
-                    startSelfieMode()
-                    uiManager.enterSelfieMode()
-                  }
-                )
+            uiManager.showFoundModal(
+              reward.title,
+              reward.description,
+              reward.points,
+              () => {
+                // Enter placement mode after dismissing the modal
+                currentState = STATE.PLACING
+                uiManager.updateClue('Point your camera at the floor and tap to place the mascot.')
               }
-            }
+            )
           }
         }
       },
       {
         event: 'reality.imageupdated',
-        process: (event) => {
-          const detail = event.detail || event
-          const {name, position, rotation} = detail
-          
-          if (name !== 'image-target-atomic') return
-
-          // If we haven't placed the mascot yet (meaning it's still loading), update loading ring
-          if (!mascotModel && placeholderRing) {
-            placeholderRing.position.copy(position)
-            placeholderRing.quaternion.copy(rotation)
-          }
-
-          // If the model is loaded and target is visible, continuously update the pose to absorb SLAM refinements
-          if (mascotModel) {
-            updateMascotPose(position, rotation)
-          }
-        }
+        process: () => {}
       },
       {
         event: 'reality.imagelost',
-        process: (event) => {
-          const detail = event.detail || event
-          const {name} = detail
-          if (name === 'image-target-atomic') {
-            if (placeholderRing) {
-              placeholderRing.visible = false
-            }
-            // NOTE: We DO NOT set mascotModel.visible = false here.
-            // The mascot remains visible in the stadium world space even when the decal leaves the frame.
-          }
-        }
+        process: () => {}
       }
     ]
   }

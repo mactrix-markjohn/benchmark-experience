@@ -16,6 +16,7 @@ const onxrloaded = () => {
   // 1. Initialize core game state and UI HUD handlers
   const gameState = new GameState()
   const uiManager = new UIManager(gameState)
+  window._uiManager = uiManager
 
   // 2. Load the initial score and objective updates on screens
   uiManager.updateHUD(
