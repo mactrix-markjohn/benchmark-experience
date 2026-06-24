@@ -73,14 +73,13 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         rawMinY = box.min.y
         console.log(`[AR] Mascot model loaded, raw bounds size:`, size, `rawMinY:`, rawMinY)
 
-        // Set scale dynamically to life-size human height (1.8m)
-        // Since 1 unit = 0.21m, 1.8m = 1.8 * UNITS_PER_METER = ~8.57 units.
+        // Set scale to 2.6m tall (life-size + 0.8m larger)
         const rawHeight = size.y
         if (rawHeight > 0) {
-          const targetHeight = 1.8 * UNITS_PER_METER
+          const targetHeight = 2.6 * UNITS_PER_METER
           scaleFactor = targetHeight / rawHeight
           mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
-          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~1.8m)`)
+          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~2.6m)`)
         } else {
           scaleFactor = 6.0
           mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
@@ -135,9 +134,10 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     dir.y = 0
     dir.normalize()
 
-    // Place mascot 0.5m in front of the wall target (toward the camera)
-    const offsetDistance = 0.5 * UNITS_PER_METER
-    const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, -offsetDistance)
+    // Place mascot 1.5m past the target (away from the camera) so the user
+    // sees it face-to-face at a comfortable distance
+    const offsetDistance = 1.5 * UNITS_PER_METER
+    const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
 
     // Ground feet on the estimated floor
     spawnPos.y = floorY - (rawMinY * scaleFactor)
