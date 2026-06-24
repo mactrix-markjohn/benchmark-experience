@@ -55,6 +55,7 @@ export const initFaceMaskModule = (uiManager) => {
     name: 'face-mask-renderer',
 
     onStart: () => {
+      console.log('[FaceMask] onStart triggered')
       const xrData = XR8.Threejs.xrScene()
       if (!xrData) {
         console.error('XR8.Threejs.xrScene() returned null/undefined in onStart')
@@ -76,9 +77,17 @@ export const initFaceMaskModule = (uiManager) => {
       {
         event: 'facecontroller.facefound',
         process: (event) => {
-          if (!maskModel) return
+          console.log('[FaceMask] facefound event fired!')
+          if (!maskModel) {
+            console.log('[FaceMask] facefound: maskModel not loaded yet')
+            return
+          }
           const {transform} = event.detail || event
-          if (!transform) return
+          if (!transform) {
+            console.log('[FaceMask] facefound: no transform details found')
+            return
+          }
+          console.log('[FaceMask] facefound: tracking success, scaling to', transform.scale)
 
           maskModel.position.copy(transform.position)
           maskModel.quaternion.copy(transform.rotation)

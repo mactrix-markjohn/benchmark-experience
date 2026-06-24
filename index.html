@@ -247,6 +247,11 @@
         log('CON_WARN: ' + Array.prototype.slice.call(arguments).join(' '));
         originalConsoleWarn.apply(console, arguments);
       };
+      const originalConsoleLog = console.log;
+      console.log = function() {
+        log('CON_LOG: ' + Array.prototype.slice.call(arguments).join(' '));
+        originalConsoleLog.apply(console, arguments);
+      };
       log('Debugger initialized. UA: ' + navigator.userAgent);
       log('XR8 status: ' + (typeof window.XR8));
       window.addEventListener('xrloaded', function() {
