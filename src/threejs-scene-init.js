@@ -1,6 +1,12 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+// 8th Wall normalizes the larger dimension of flat image targets to 1.0 unit.
+// The physical book cover is approximately 0.21m in height.
+// Therefore, 1.0 Three.js unit = 0.21 physical meters.
+const PHYSICAL_METERS_PER_UNIT = 0.21
+const UNITS_PER_METER = 1.0 / PHYSICAL_METERS_PER_UNIT // ~4.76 units/meter
+
 // Helper to define 3D assets and coordinate target scans with game state & UI
 export const initScenePipelineModule = (gameState, uiManager) => {
   let mascotPlaced = false
@@ -59,19 +65,21 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         mascotModel = gltf.scene
         
         // Print model bounds size for visual scaling reference
+        mascotModel.updateMatrixWorld(true)
         const box = new THREE.Box3().setFromObject(mascotModel)
         const size = box.getSize(new THREE.Vector3())
         console.log(`[AR] Mascot model loaded, raw bounds size:`, size)
 
         // Set scale dynamically to standard human size (1.8m height)
+        // Since 1 unit = 0.21m, 1.8m = 1.8 * UNITS_PER_METER = ~8.57 units.
         const rawHeight = size.y
         if (rawHeight > 0) {
-          const targetHeight = 1.8
+          const targetHeight = 1.8 * UNITS_PER_METER
           const scaleFactor = targetHeight / rawHeight
           mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
-          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight}m`)
+          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~1.8m)`)
         } else {
-          mascotModel.scale.set(1.5, 1.5, 1.5) // Fallback if height check fails
+          mascotModel.scale.set(6.0, 6.0, 6.0) // Fallback if height check fails
         }
         mascotModel.visible = false // Hide until decal is scanned
         
@@ -185,7 +193,9 @@ export const initScenePipelineModule = (gameState, uiManager) => {
             dir.normalize()
 
             // 3. Set the spawn position 1.5 meters behind the target (away from the camera)
-            const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, 1.5)
+            // 1.5m in units is 1.5 * UNITS_PER_METER
+            const offsetDistance = 1.5 * UNITS_PER_METER
+            const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
             
             // 4. Ground the mascot at the same height as the target (the floor)
             spawnPos.y = targetPos.y
