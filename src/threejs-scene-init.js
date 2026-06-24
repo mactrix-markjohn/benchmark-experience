@@ -22,6 +22,11 @@ export const initScenePipelineModule = (gameState, uiManager) => {
   let xrCamera = null
   let pendingActivation = false
 
+  // Drift correction: store offset between image target and mascot
+  let lastTargetPos = null
+  let mascotOffsetFromTarget = null
+  let mascotFaceDir = null
+
   const initXrScene = ({scene, camera, renderer}) => {
     renderer.preserveDrawingBuffer = true
     xrScene = scene
@@ -37,7 +42,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     scene.add(dirLight)
     scene.add(new THREE.AmbientLight(0xffffff, 0.6))
 
-    // Ground reticle for placement
     const ringGeo = new THREE.RingGeometry(0.6, 0.75, 48)
     ringGeo.rotateX(-Math.PI / 2)
     reticle = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
@@ -46,13 +50,11 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     reticle.visible = false
     scene.add(reticle)
 
-    // Invisible ground for raycasting
     const groundGeo = new THREE.PlaneGeometry(500, 500)
     groundGeo.rotateX(-Math.PI / 2)
     groundPlane = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}))
     scene.add(groundPlane)
 
-    // Load mascot
     new GLTFLoader().load('assets/AstronautThumbUp.glb', (gltf) => {
       mascotModel = gltf.scene
       mascotModel.updateMatrixWorld(true)
@@ -76,8 +78,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         mixer.clipAction(gltf.animations[0]).play()
         mixers.push(mixer)
       }
-
-      console.log('[AR] Mascot loaded, height:', size.y, 'scale:', scaleFactor)
 
       if (pendingActivation) {
         pendingActivation = false
@@ -117,12 +117,29 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     xrCamera.getWorldPosition(cp)
     mascotModel.lookAt(new THREE.Vector3(cp.x, mascotModel.position.y, cp.z))
 
+    // Store the facing direction so we can restore it during drift correction
+    mascotFaceDir = new THREE.Vector3(cp.x, mascotModel.position.y, cp.z)
+
+    // Store offset from last known target position for drift correction
+    if (lastTargetPos) {
+      mascotOffsetFromTarget = new THREE.Vector3().subVectors(
+        mascotModel.position, lastTargetPos
+      )
+    }
+
     mascotModel.visible = true
     reticle.visible = false
     currentState = STATE.PLACED
 
     uiManager.showInstruction('')
     uiManager.showShutterButton()
+  }
+
+  // Correct mascot position using the image target as anchor
+  const correctDrift = (targetPos) => {
+    if (!mascotModel || !mascotOffsetFromTarget) return
+    const corrected = new THREE.Vector3().copy(targetPos).add(mascotOffsetFromTarget)
+    mascotModel.position.copy(corrected)
   }
 
   const handlePlacementTap = (e) => {
@@ -172,20 +189,49 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       {
         event: 'reality.imagefound',
         process: (event) => {
-          if (currentState !== STATE.SCANNING) return
-          const {name} = event.detail || event
+          const detail = event.detail || event
+          const {name, position} = detail
           if (name !== 'image-target-atomic') return
 
-          if (!mascotModel) {
-            pendingActivation = true
-            uiManager.showInstruction('Loading mascot...')
-            return
+          // Always track the target position for drift correction
+          lastTargetPos = new THREE.Vector3().copy(position)
+
+          if (currentState === STATE.SCANNING) {
+            if (!mascotModel) {
+              pendingActivation = true
+              uiManager.showInstruction('Loading mascot...')
+              return
+            }
+            activateExperience()
           }
-          activateExperience()
+
+          // If mascot is already placed, correct its position
+          if (currentState === STATE.PLACED) {
+            correctDrift(lastTargetPos)
+          }
         }
       },
-      {event: 'reality.imageupdated', process: () => {}},
-      {event: 'reality.imagelost', process: () => {}}
+      {
+        event: 'reality.imageupdated',
+        process: (event) => {
+          const detail = event.detail || event
+          const {name, position} = detail
+          if (name !== 'image-target-atomic') return
+
+          lastTargetPos = new THREE.Vector3().copy(position)
+
+          // Continuously correct drift while the target is visible
+          if (currentState === STATE.PLACED) {
+            correctDrift(lastTargetPos)
+          }
+        }
+      },
+      {
+        event: 'reality.imagelost',
+        process: () => {
+          // Mascot stays at last corrected position when target leaves view
+        }
+      }
     ]
   }
 }
