@@ -45,20 +45,31 @@ export const initFaceMaskModule = (uiManager) => {
       const box = new THREE.Box3().setFromObject(maskModel)
       const size = box.getSize(new THREE.Vector3())
       console.log('[FaceMask] Model loaded, bounds:', size)
-    }, undefined, (err) => console.error('Mask load error:', err))
+    }, undefined, (err) => {
+      console.error('Mask load error:', err)
+      alert('Failed to load face mask model: ' + (err.message || err))
+    })
   }
 
   return {
     name: 'face-mask-renderer',
 
     onStart: () => {
-      const {scene, camera, renderer} = XR8.Threejs.xrScene()
+      const xrData = XR8.Threejs.xrScene()
+      if (!xrData) {
+        console.error('XR8.Threejs.xrScene() returned null/undefined in onStart')
+        alert('XR8.Threejs.xrScene() is not initialized yet in onStart!')
+        return
+      }
+      const {scene, camera, renderer} = xrData
       initScene({scene, camera, renderer})
     },
 
     onUpdate: () => {
-      const delta = clock.getDelta()
-      mixers.forEach((m) => m.update(delta))
+      if (mixers.length > 0) {
+        const delta = clock.getDelta()
+        mixers.forEach((m) => m.update(delta))
+      }
     },
 
     listeners: [

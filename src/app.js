@@ -18,8 +18,21 @@ const onxrloaded = () => {
     uiManager.showInstruction(errorStr)
   }
 
+  // Catch unhandled promise rejections (useful for async/WASM load errors)
+  window.addEventListener('unhandledrejection', (event) => {
+    const errorStr = `Unhandled Promise Rejection: ${event.reason}`
+    alert(errorStr)
+    uiManager.showInstruction(errorStr)
+  })
+
   // Configure FaceController upfront
   XR8.FaceController.configure({
+    meshGeometry: [
+      XR8.FaceController.MeshGeometry.FACE
+    ],
+    coordinates: {
+      mirroredDisplay: true,
+    },
     maxDetections: 1,
   })
 
@@ -49,13 +62,13 @@ const onxrloaded = () => {
   uiManager.showInstruction('Point the camera at your face!')
   uiManager.showShutterButton('Point the camera at your face and tap the shutter!')
 
-  // Start the session with the FRONT camera
+  // Start the session with the FRONT camera and allow desktop testing
   XR8.run({
     canvas: document.getElementById('camerafeed'),
-    cameraDirection: 'front',
     cameraConfig: {
       direction: XR8.XrConfig.camera().FRONT
-    }
+    },
+    allowedDevices: XR8.XrConfig.device().ANY,
   })
 }
 
