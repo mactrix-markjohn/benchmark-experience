@@ -115,17 +115,33 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     camera.position.set(0, 2, 3)
   }
 
-  // Helper to rotate the mascot to face the camera smoothly on Y-axis
-  const alignMascotToCamera = () => {
+  // Helper to update the mascot's position and rotation relative to the target pose
+  const updateMascotPose = (position, rotation) => {
     if (!mascotModel || !xrCamera) return
+
+    // 1. Get camera world position
     const cameraPos = new THREE.Vector3()
     xrCamera.getWorldPosition(cameraPos)
+
+    // 2. Calculate direction from camera to target projected on the horizontal floor plane (Y = 0)
+    const targetPos = new THREE.Vector3().copy(position)
+    const dir = new THREE.Vector3().subVectors(targetPos, cameraPos)
+    dir.y = 0
+    dir.normalize()
+
+    // 3. Set the spawn position 3.5 meters behind the target (away from the camera)
+    // 3.5m in units is 3.5 * UNITS_PER_METER (offset further back to fit the giant size)
+    const offsetDistance = 3.5 * UNITS_PER_METER
+    const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
     
-    const mascotPos = new THREE.Vector3()
-    mascotModel.getWorldPosition(mascotPos)
-    
-    // Look at camera position but lock height (Y) to keep the mascot upright
-    const lookTarget = new THREE.Vector3(cameraPos.x, mascotPos.y, cameraPos.z)
+    // 4. Ground the mascot at the same height as the target (the floor)
+    // Subtract the raw min Y bounds scaled to keep the feet flat on the ground
+    spawnPos.y = targetPos.y - (rawMinY * scaleFactor)
+
+    mascotModel.position.copy(spawnPos)
+
+    // 5. Look at the camera, locking the Y-axis so the mascot stands upright
+    const lookTarget = new THREE.Vector3(cameraPos.x, spawnPos.y, cameraPos.z)
     mascotModel.lookAt(lookTarget)
   }
 
@@ -177,64 +193,43 @@ export const initScenePipelineModule = (gameState, uiManager) => {
             return
           }
 
-          // TARGET-TO-SLAM CO-EXISTENCE TRANSITION
-          // If mascot has not been placed yet, lock its coordinate position in world space
-          if (!mascotPlaced && mascotModel) {
-            mascotPlaced = true
-            
+          if (mascotModel) {
             if (placeholderRing) {
               placeholderRing.visible = false
             }
 
-            // 1. Get camera world position
-            const cameraPos = new THREE.Vector3()
-            xrCamera.getWorldPosition(cameraPos)
-
-            // 2. Calculate direction from camera to target projected on the horizontal floor plane (Y = 0)
-            const targetPos = new THREE.Vector3().copy(position)
-            const dir = new THREE.Vector3().subVectors(targetPos, cameraPos)
-            dir.y = 0
-            dir.normalize()
-
-            // 3. Set the spawn position 3.5 meters behind the target (away from the camera)
-            // 3.5m in units is 3.5 * UNITS_PER_METER (offset further back to fit the 4x larger size)
-            const offsetDistance = 3.5 * UNITS_PER_METER
-            const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
+            // Continuously update mascot pose to keep it locked to the floor
+            updateMascotPose(position, rotation)
             
-            // 4. Ground the mascot at the same height as the target (the floor)
-            // Adjust the model's Y origin based on its bounding box minimum Y and scale factor to keep the feet on the floor
-            spawnPos.y = targetPos.y - (rawMinY * scaleFactor)
-
-            mascotModel.position.copy(spawnPos)
-
-            // 5. Look at the camera, but lock the Y-axis so the mascot stands perfectly upright
-            const lookTarget = new THREE.Vector3(cameraPos.x, spawnPos.y, cameraPos.z)
-            mascotModel.lookAt(lookTarget)
-            
-            // 6. Make visible
+            // Make visible
             mascotModel.visible = true
-            console.log(`[AR] Mascot placed in world space at:`, mascotModel.position)
 
-            // Award points and check completions via game state
-            const reward = gameState.scanTarget(name)
-            if (reward) {
-              uiManager.updateHUD(
-                reward.totalScore,
-                reward.progress,
-                gameState.totalTargets,
-                reward.nextClue
-              )
+            // Trigger score rewards ONLY ONCE when first found
+            if (!mascotPlaced) {
+              mascotPlaced = true
+              console.log(`[AR] Mascot first placed in world space at:`, mascotModel.position)
 
-              // Open success scan modal overlay
-              uiManager.showFoundModal(
-                reward.title,
-                reward.description,
-                reward.points,
-                () => {
-                  // Show the camera shutter button overlay for taking a selfie
-                  uiManager.showShutterButton()
-                }
-              )
+              // Award points and check completions via game state
+              const reward = gameState.scanTarget(name)
+              if (reward) {
+                uiManager.updateHUD(
+                  reward.totalScore,
+                  reward.progress,
+                  gameState.totalTargets,
+                  reward.nextClue
+                )
+
+                // Open success scan modal overlay
+                uiManager.showFoundModal(
+                  reward.title,
+                  reward.description,
+                  reward.points,
+                  () => {
+                    // Show the camera shutter button overlay for taking a selfie
+                    uiManager.showShutterButton()
+                  }
+                )
+              }
             }
           }
         }
@@ -242,16 +237,21 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       {
         event: 'reality.imageupdated',
         process: (event) => {
-          // If we haven't placed the mascot yet, align loading indicator
           const detail = event.detail || event
           const {name, position, rotation} = detail
-          if (name === 'image-target-atomic' && !mascotPlaced && placeholderRing) {
+          
+          if (name !== 'image-target-atomic') return
+
+          // If we haven't placed the mascot yet (meaning it's still loading), update loading ring
+          if (!mascotModel && placeholderRing) {
             placeholderRing.position.copy(position)
             placeholderRing.quaternion.copy(rotation)
           }
-          // NOTE: We DO NOT update mascotModel coordinates here.
-          // By leaving it untouched, the mascot remains anchored exactly in SLAM space
-          // at its original spawn point, preventing tracking jitters.
+
+          // If the model is loaded and target is visible, continuously update the pose to absorb SLAM refinements
+          if (mascotModel) {
+            updateMascotPose(position, rotation)
+          }
         }
       },
       {
@@ -259,11 +259,13 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         process: (event) => {
           const detail = event.detail || event
           const {name} = detail
-          if (name === 'image-target-atomic' && !mascotPlaced && placeholderRing) {
-            placeholderRing.visible = false
+          if (name === 'image-target-atomic') {
+            if (placeholderRing) {
+              placeholderRing.visible = false
+            }
+            // NOTE: We DO NOT set mascotModel.visible = false here.
+            // The mascot remains visible in the stadium world space even when the decal leaves the frame.
           }
-          // NOTE: We DO NOT set mascotModel.visible = false here.
-          // The mascot remains visible in the stadium world space even when the decal leaves the frame.
         }
       }
     ]
