@@ -105,15 +105,26 @@ const onxrloaded = async () => {
     if (sc) sc.style.display = 'none'
   }
 
+  let sessionRunning = false
+
+  const switchToMode = (mode) => {
+    if (sessionRunning) {
+      pendingRun = () => {
+        sessionRunning = false
+        startSession(mode)
+        sessionRunning = true
+      }
+      XR8.stop()
+    } else {
+      startSession(mode)
+      sessionRunning = true
+    }
+  }
+
   const startMascotMode = () => {
     hideMenu()
-    if (isFaceMode) {
-      pendingRun = () => startSession('mascot')
-      XR8.stop()
-      isFaceMode = false
-    } else {
-      startSession('mascot')
-    }
+    isFaceMode = false
+    switchToMode('mascot')
     uiManager.showInstruction('Scan the Mascot Decal to begin')
   }
 
@@ -121,23 +132,16 @@ const onxrloaded = async () => {
     hideMenu()
     const loaded = await ensureFaceChunk()
     if (!loaded) return
-
-    if (!isFaceMode) {
-      pendingRun = () => startSession('mask')
-      XR8.stop()
-      isFaceMode = true
-    } else {
-      startSession('mask')
-    }
+    isFaceMode = true
+    switchToMode('mask')
     uiManager.showShutterButton('Point the camera at your face and tap the shutter!')
   }
 
   if (mascotCard) mascotCard.addEventListener('click', startMascotMode)
   if (maskCard) maskCard.addEventListener('click', startMaskMode)
-  if (backBtn) backBtn.addEventListener('click', showMenu)
-
-  // Start in mascot mode
-  startSession('mascot')
+  if (backBtn) backBtn.addEventListener('click', () => {
+    showMenu()
+  })
 }
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
