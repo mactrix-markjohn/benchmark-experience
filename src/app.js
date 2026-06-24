@@ -11,77 +11,99 @@ window.THREE.GLTFLoader = GLTFLoader
 import targetAtomic from '../image-targets/image-target-atomic.json'
 import targetBackPower from '../image-targets/image-target-back-power.json'
 
-const params = new URLSearchParams(window.location.search)
-const mode = params.get('mode')
+const onxrloaded = () => {
+  const gameState = new GameState()
+  const uiManager = new UIManager(gameState)
 
-// If no mode selected, show the menu and wait
-if (!mode) {
-  const menu = document.getElementById('menu-screen')
-  const onboarding = document.getElementById('onboarding-screen')
-  if (onboarding) onboarding.style.display = 'none'
-  if (menu) menu.style.display = 'flex'
-} else {
-  // Hide menu, show onboarding briefly then start
-  const menu = document.getElementById('menu-screen')
-  if (menu) menu.style.display = 'none'
+  let isFaceMode = false
 
-  const onxrloaded = () => {
-    const gameState = new GameState()
-    const uiManager = new UIManager(gameState)
+  // Configure both controllers upfront
+  XR8.XrController.configure({
+    imageTargetData: [targetAtomic, targetBackPower]
+  })
 
-    // Back button returns to menu
-    const backBtn = document.getElementById('back-btn')
-    if (backBtn) {
-      backBtn.style.display = 'block'
-      backBtn.addEventListener('click', () => {
-        window.location.href = window.location.pathname
-      })
-    }
+  XR8.FaceController.configure({
+    meshGeometry: [],
+    maxDetections: 1,
+  })
 
-    // Hide onboarding for mode starts
-    const onboarding = document.getElementById('onboarding-screen')
-    if (onboarding) onboarding.style.display = 'none'
+  // Store pipeline module references for swapping
+  const xrController = XR8.XrController.pipelineModule()
+  const faceController = XR8.FaceController.pipelineModule()
+  const mascotModule = initScenePipelineModule(gameState, uiManager)
+  const maskModule = initFaceMaskModule(uiManager)
 
-    if (mode === 'mask') {
-      try {
-        XR8.FaceController.configure({maxDetections: 1})
+  // Start with all shared modules + mascot mode
+  XR8.addCameraPipelineModules([
+    XR8.GlTextureRenderer.pipelineModule(),
+    XR8.Threejs.pipelineModule(),
+    xrController,
+    LandingPage.pipelineModule(),
+    XRExtras.FullWindowCanvas.pipelineModule(),
+    XRExtras.Loading.pipelineModule(),
+    XRExtras.RuntimeError.pipelineModule(),
+    mascotModule,
+  ])
 
-        XR8.addCameraPipelineModules([
-          XR8.GlTextureRenderer.pipelineModule(),
-          XR8.Threejs.pipelineModule(),
-          XR8.FaceController.pipelineModule(),
-          XRExtras.AlmostThere.pipelineModule(),
-          XRExtras.FullWindowCanvas.pipelineModule(),
-          XRExtras.Loading.pipelineModule(),
-          XRExtras.RuntimeError.pipelineModule(),
-          initFaceMaskModule(uiManager),
-        ])
-        XR8.run({canvas: document.getElementById('camerafeed')})
-        uiManager.showInstruction('Point the camera at your face!')
-        uiManager.showShutterButton()
-      } catch (err) {
-        console.error('[Mask] Init error:', err)
-        uiManager.showInstruction('Face tracking error: ' + err.message)
-      }
+  // Menu handling
+  const menuScreen = document.getElementById('menu-screen')
+  const backBtn = document.getElementById('back-btn')
+  const mascotCard = document.getElementById('mascot-card')
+  const maskCard = document.getElementById('mask-card')
 
-    } else {
-      // Mascot mode
+  const hideMenu = () => {
+    if (menuScreen) menuScreen.style.display = 'none'
+    if (backBtn) backBtn.style.display = 'block'
+  }
+
+  const showMenu = () => {
+    if (menuScreen) menuScreen.style.display = 'flex'
+    if (backBtn) backBtn.style.display = 'none'
+    uiManager.showInstruction('')
+    const shutterContainer = document.getElementById('shutter-container')
+    if (shutterContainer) shutterContainer.style.display = 'none'
+  }
+
+  const startMascotMode = () => {
+    hideMenu()
+    if (isFaceMode) {
+      XR8.pause()
+      XR8.removeCameraPipelineModule(faceController.name)
+      XR8.removeCameraPipelineModule(maskModule.name)
       XR8.XrController.configure({
         imageTargetData: [targetAtomic, targetBackPower]
       })
-      XR8.addCameraPipelineModules([
-        XR8.GlTextureRenderer.pipelineModule(),
-        XR8.Threejs.pipelineModule(),
-        XR8.XrController.pipelineModule(),
-        LandingPage.pipelineModule(),
-        XRExtras.FullWindowCanvas.pipelineModule(),
-        XRExtras.Loading.pipelineModule(),
-        XRExtras.RuntimeError.pipelineModule(),
-        initScenePipelineModule(gameState, uiManager),
-      ])
-      XR8.run({canvas: document.getElementById('camerafeed')})
+      XR8.addCameraPipelineModule(xrController)
+      XR8.addCameraPipelineModule(mascotModule)
+      XR8.resume()
+      isFaceMode = false
     }
+    uiManager.showInstruction('Scan the Mascot Decal to begin')
   }
 
-  window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
+  const startMaskMode = () => {
+    hideMenu()
+    if (!isFaceMode) {
+      XR8.pause()
+      XR8.removeCameraPipelineModule(xrController.name)
+      XR8.removeCameraPipelineModule(mascotModule.name)
+      XR8.addCameraPipelineModule(faceController)
+      XR8.addCameraPipelineModule(maskModule)
+      XR8.resume()
+      isFaceMode = true
+    }
+    uiManager.showInstruction('Point the camera at your face!')
+    uiManager.showShutterButton()
+  }
+
+  if (mascotCard) mascotCard.addEventListener('click', startMascotMode)
+  if (maskCard) maskCard.addEventListener('click', startMaskMode)
+  if (backBtn) backBtn.addEventListener('click', () => {
+    showMenu()
+  })
+
+  // Start XR8 (mascot mode by default, menu shown on top)
+  XR8.run({canvas: document.getElementById('camerafeed')})
 }
+
+window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
