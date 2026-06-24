@@ -13,6 +13,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
   let mascotModel = null
   let placeholderRing = null
   let mixer = null
+  let rawMinY = 0
+  let scaleFactor = 1.0
   const mixers = []
   const clock = new THREE.Clock()
   
@@ -76,11 +78,12 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         const rawHeight = size.y
         if (rawHeight > 0) {
           const targetHeight = 1.8 * UNITS_PER_METER * 4.0
-          const scaleFactor = targetHeight / rawHeight
+          scaleFactor = targetHeight / rawHeight
           mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
           console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~7.2m)`)
         } else {
-          mascotModel.scale.set(24.0, 24.0, 24.0) // Fallback if height check fails
+          scaleFactor = 24.0
+          mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor) // Fallback if height check fails
         }
         mascotModel.visible = false // Hide until decal is scanned
         
@@ -199,7 +202,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
             const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
             
             // 4. Ground the mascot at the same height as the target (the floor)
-            spawnPos.y = targetPos.y
+            // Adjust the model's Y origin based on its bounding box minimum Y and scale factor to keep the feet on the floor
+            spawnPos.y = targetPos.y - (rawMinY * scaleFactor)
 
             mascotModel.position.copy(spawnPos)
 
