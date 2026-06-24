@@ -17,10 +17,14 @@ export const initScenePipelineModule = (gameState, uiManager) => {
   let scaleFactor = 1.0
   const mixers = []
   const clock = new THREE.Clock()
-  
+
   // Track 8th Wall scene coordinates
   let xrScene = null
   let xrCamera = null
+
+  // Selfie mode state
+  let selfieMode = false
+  let selfieAnimFrame = null
 
   // Populates lighting, shadows, and default placeholder geometries
   const initXrScene = ({scene, camera, renderer}) => {
@@ -149,6 +153,53 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     mascotModel.lookAt(lookTarget)
   }
 
+  // Transition from back-camera AR to front-camera selfie mode
+  const startSelfieMode = () => {
+    selfieMode = true
+
+    const {scene, camera, renderer} = XR8.Threejs.xrScene()
+
+    XR8.pause()
+
+    // Transparent background so the front-camera video shows through the canvas
+    renderer.setClearColor(0x000000, 0)
+
+    // Re-light for selfie framing (front-lit)
+    const selfieLight = new THREE.DirectionalLight(0xffffff, 1.0)
+    selfieLight.position.set(0, 5, 10)
+    scene.add(selfieLight)
+
+    // Set up a fixed perspective camera for selfie composition
+    const mascotH = 2.6 * UNITS_PER_METER
+    camera.fov = 50
+    camera.aspect = window.innerWidth / window.innerHeight
+    camera.near = 0.1
+    camera.far = 1000
+    camera.updateProjectionMatrix()
+    camera.position.set(0, mascotH * 0.45, mascotH * 1.4)
+    camera.lookAt(mascotH * 0.12, mascotH * 0.35, 0)
+
+    // Position mascot to the right side of the frame, facing the camera at a slight angle
+    if (mascotModel) {
+      mascotModel.position.set(mascotH * 0.25, 0, 0)
+      mascotModel.rotation.set(0, -Math.PI / 6, 0)
+      mascotModel.visible = true
+    }
+
+    if (placeholderRing) placeholderRing.visible = false
+
+    // Custom render loop (XR8 onUpdate no longer fires when paused)
+    const renderSelfieFrame = () => {
+      if (!selfieMode) return
+      const delta = clock.getDelta()
+      mixers.forEach((m) => m.update(delta))
+      renderer.clear()
+      renderer.render(scene, camera)
+      selfieAnimFrame = requestAnimationFrame(renderSelfieFrame)
+    }
+    renderSelfieFrame()
+  }
+
   return {
     name: 'scavenger-hunt-3d-renderer',
 
@@ -229,8 +280,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
                   reward.description,
                   reward.points,
                   () => {
-                    // Show the camera shutter button overlay for taking a selfie
-                    uiManager.showShutterButton()
+                    startSelfieMode()
+                    uiManager.enterSelfieMode()
                   }
                 )
               }

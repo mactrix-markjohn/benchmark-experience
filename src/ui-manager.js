@@ -4,6 +4,9 @@ export class UIManager {
   constructor(gameState, onCaptureDone) {
     this.gameState = gameState
     this.onCaptureDone = onCaptureDone
+    this.selfieStream = null
+    this.selfieVideoEl = null
+    this.inSelfieMode = false
 
     // Cache DOM element references
     this.scoreText = document.getElementById('score-text')
@@ -57,17 +60,23 @@ export class UIManager {
       })
     }
 
-    // 3. Close preview button
+    // 3. Close preview button — return to selfie mode to retake
     if (this.closePreviewBtn) {
       this.closePreviewBtn.addEventListener('click', () => {
         this.hidePreviewModal()
-        // If they close preview without claiming, reset the clue text to prompt them
-        this.updateHUD(
-          this.gameState.score,
-          this.gameState.scannedTargets.length,
-          this.gameState.totalTargets,
-          this.gameState.getCurrentClue()
-        )
+        if (this.inSelfieMode) {
+          this.showShutterButton()
+          if (this.clueText) {
+            this.clueText.innerText = 'Strike a pose with the mascot and tap the shutter!'
+          }
+        } else {
+          this.updateHUD(
+            this.gameState.score,
+            this.gameState.scannedTargets.length,
+            this.gameState.totalTargets,
+            this.gameState.getCurrentClue()
+          )
+        }
       })
     }
   }
@@ -107,6 +116,34 @@ export class UIManager {
     this.foundModal.classList.add('active')
   }
 
+  // Switch to front camera for selfie mode
+  async enterSelfieMode() {
+    this.inSelfieMode = true
+
+    try {
+      this.selfieStream = await navigator.mediaDevices.getUserMedia({
+        video: {facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080}}
+      })
+
+      this.selfieVideoEl = document.getElementById('selfie-video')
+      this.selfieVideoEl.srcObject = this.selfieStream
+      await this.selfieVideoEl.play()
+      this.selfieVideoEl.style.display = 'block'
+
+      // Make WebGL canvas background transparent so video shows through
+      const canvas = document.getElementById('camerafeed')
+      canvas.style.background = 'transparent'
+
+      this.showShutterButton()
+      if (this.clueText) {
+        this.clueText.innerText = 'Strike a pose with the mascot and tap the shutter!'
+      }
+    } catch (err) {
+      console.error('Failed to start front camera:', err)
+      this.showShutterButton()
+    }
+  }
+
   // Show camera shutter button for selfies
   showShutterButton() {
     if (this.shutterContainer) {
@@ -123,7 +160,6 @@ export class UIManager {
 
   // Captures and merges camera video feed and WebGL canvas overlay
   triggerShutterCapture() {
-    // 1. Trigger camera flash visual overlay
     if (this.flashContainer) {
       this.flashContainer.style.opacity = '1'
       setTimeout(() => {
@@ -131,10 +167,11 @@ export class UIManager {
       }, 150)
     }
 
-    // 2. Perform canvas screen capture merging
-    const video = document.querySelector('video')
+    const video = this.inSelfieMode
+      ? this.selfieVideoEl
+      : document.querySelector('video')
     const webglCanvas = document.getElementById('camerafeed')
-    
+
     if (!video || !webglCanvas) {
       alert('Error: Camera stream not detected!')
       return
@@ -142,18 +179,24 @@ export class UIManager {
 
     const captureCanvas = document.createElement('canvas')
     const ctx = captureCanvas.getContext('2d')
-    
-    // Set matching dimensions
+
     captureCanvas.width = video.videoWidth || window.innerWidth
     captureCanvas.height = video.videoHeight || window.innerHeight
 
-    // Draw background webcam stream frame
-    ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height)
-    
-    // Draw foreground 3D WebGL elements
+    // Mirror the front camera horizontally for a natural selfie look
+    if (this.inSelfieMode) {
+      ctx.save()
+      ctx.translate(captureCanvas.width, 0)
+      ctx.scale(-1, 1)
+      ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height)
+      ctx.restore()
+    } else {
+      ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height)
+    }
+
+    // Draw 3D mascot overlay on top
     ctx.drawImage(webglCanvas, 0, 0, captureCanvas.width, captureCanvas.height)
 
-    // Convert the combined frame to data URL image
     const dataUrl = captureCanvas.toDataURL('image/jpeg')
     this.showPreviewModal(dataUrl, captureCanvas)
   }
