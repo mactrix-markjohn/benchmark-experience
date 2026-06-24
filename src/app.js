@@ -22,7 +22,7 @@ const onxrloaded = () => {
     if (pendingRun) {
       const runFn = pendingRun
       pendingRun = null
-      runFn()
+      setTimeout(runFn, 500)
     }
   })
 
@@ -42,17 +42,30 @@ const onxrloaded = () => {
   const mascotModule = initScenePipelineModule(gameState, uiManager)
   const maskModule = initFaceMaskModule(uiManager)
 
-  // Start with all shared modules + mascot mode
-  XR8.addCameraPipelineModules([
-    XR8.GlTextureRenderer.pipelineModule(),
-    XR8.Threejs.pipelineModule(),
-    xrController,
-    LandingPage.pipelineModule(),
-    XRExtras.FullWindowCanvas.pipelineModule(),
-    XRExtras.Loading.pipelineModule(),
-    XRExtras.RuntimeError.pipelineModule(),
-    mascotModule,
-  ])
+  const recreateSession = (mode) => {
+    // Clear all existing pipeline modules to start fresh
+    XR8.clearCameraPipelineModules()
+
+    // Add fresh instances of all required modules for the target mode
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      mode === 'mask' ? faceController : xrController,
+      LandingPage.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      mode === 'mask' ? maskModule : mascotModule,
+    ])
+
+    // Run the session with the appropriate front/back camera direction
+    XR8.run({
+      canvas: document.getElementById('camerafeed'),
+      cameraConfig: {
+        direction: mode === 'mask' ? XR8.XrConfig.camera().FRONT : XR8.XrConfig.camera().BACK
+      }
+    })
+  }
 
   // Menu handling
   const menuScreen = document.getElementById('menu-screen')
@@ -76,21 +89,7 @@ const onxrloaded = () => {
   const startMascotMode = () => {
     hideMenu()
     if (isFaceMode) {
-      pendingRun = () => {
-        XR8.removeCameraPipelineModule(faceController.name)
-        XR8.removeCameraPipelineModule(maskModule.name)
-        XR8.XrController.configure({
-          imageTargetData: [targetAtomic, targetBackPower]
-        })
-        XR8.addCameraPipelineModule(xrController)
-        XR8.addCameraPipelineModule(mascotModule)
-        XR8.run({
-          canvas: document.getElementById('camerafeed'),
-          cameraConfig: {
-            direction: XR8.XrConfig.camera().BACK
-          }
-        })
-      }
+      pendingRun = () => recreateSession('mascot')
       XR8.stop()
       isFaceMode = false
     }
@@ -100,23 +99,12 @@ const onxrloaded = () => {
   const startMaskMode = () => {
     hideMenu()
     if (!isFaceMode) {
-      pendingRun = () => {
-        XR8.removeCameraPipelineModule(xrController.name)
-        XR8.removeCameraPipelineModule(mascotModule.name)
-        XR8.addCameraPipelineModule(faceController)
-        XR8.addCameraPipelineModule(maskModule)
-        XR8.run({
-          canvas: document.getElementById('camerafeed'),
-          cameraConfig: {
-            direction: XR8.XrConfig.camera().FRONT
-          }
-        })
-      }
+      pendingRun = () => recreateSession('mask')
       XR8.stop()
       isFaceMode = true
     }
     uiManager.showInstruction('Point the camera at your face!')
-    uiManager.showShutterButton()
+    uiManager.showShutterButton('Point the camera at your face and tap the shutter!')
   }
 
   if (mascotCard) mascotCard.addEventListener('click', startMascotMode)
@@ -125,13 +113,8 @@ const onxrloaded = () => {
     showMenu()
   })
 
-  // Start XR8 (mascot mode by default, menu shown on top)
-  XR8.run({
-    canvas: document.getElementById('camerafeed'),
-    cameraConfig: {
-      direction: XR8.XrConfig.camera().BACK
-    }
-  })
+  // Start in mascot mode by default
+  recreateSession('mascot')
 }
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)

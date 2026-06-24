@@ -12,6 +12,8 @@ export const initFaceMaskModule = (uiManager) => {
     renderer.preserveDrawingBuffer = true
     xrScene = scene
     xrCamera = camera
+    maskModel = null
+    mixers.length = 0
 
     // Front-facing light for the mask
     scene.add(new THREE.DirectionalLight(0xffffff, 1.2).translateZ(5).translateY(3))

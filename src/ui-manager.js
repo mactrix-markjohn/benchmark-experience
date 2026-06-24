@@ -80,9 +80,9 @@ export class UIManager {
     this.foundOverlay.classList.add('active')
   }
 
-  showShutterButton() {
+  showShutterButton(customText) {
     if (this.shutterContainer) this.shutterContainer.style.display = 'flex'
-    this.showInstruction('Stand next to the mascot and tap the shutter!')
+    this.showInstruction(customText || 'Stand next to the mascot and tap the shutter!')
   }
 
   triggerCapture() {

@@ -31,6 +31,17 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     xrCamera = camera
     renderer.shadowMap.enabled = true
 
+    currentState = STATE.SCANNING
+    mascotModel = null
+    reticle = null
+    groundPlane = null
+    rawMinY = 0
+    scaleFactor = 1.0
+    mixers.length = 0
+    pendingActivation = false
+    groundCalibrated = false
+    lastTargetPos = null
+
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.5)
     dirLight.position.set(5, 12, 8)
     dirLight.castShadow = true
@@ -144,6 +155,7 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       XR8.XrController.updateCameraProjectionMatrix({
         origin: camera.position, facing: camera.quaternion
       })
+      canvas.removeEventListener('touchstart', handlePlacementTap)
       canvas.addEventListener('touchstart', handlePlacementTap)
     },
 

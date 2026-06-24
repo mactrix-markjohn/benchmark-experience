@@ -3,693 +3,267 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Sponsor WebAR Scavenger Hunt</title>
+  <title>Benchmark AR Experience</title>
 
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
-  <!-- 8th Wall Scripts (Self-Hosted Engine, CDN UI Helpers) -->
-  <script src="./external/xr/xr.js?v=3" async data-preload-chunks="slam"></script>
+  <script src="./external/xr/xr.js?v=6" async data-preload-chunks="slam,face"></script>
   <script src="https://cdn.8thwall.com/web/xrextras/xrextras.js" crossorigin="anonymous"></script>
   <script src="https://cdn.8thwall.com/web/landing-page/landing-page.js" crossorigin="anonymous"></script>
 
-  <!-- Mobile Console Debugger (Eruda) -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-
   <style>
-    /* CSS Variables for design system */
     :root {
-      --font-family: 'Outfit', sans-serif;
-      --color-primary: #8a2be2; /* Purple */
-      --color-primary-glow: rgba(138, 43, 226, 0.4);
-      --color-secondary: #00f2fe; /* Cyan */
-      --color-secondary-glow: rgba(0, 242, 254, 0.4);
-      --color-background-glass: rgba(10, 10, 18, 0.7);
-      --color-background-glass-solid: rgba(10, 10, 18, 0.95);
-      --border-radius: 16px;
-      --transition-duration: 0.3s;
+      --font: 'Outfit', sans-serif;
+      --cyan: #00f2fe;
+      --purple: #8a2be2;
+      --glass: rgba(0, 0, 0, 0.45);
+      --glass-solid: rgba(10, 10, 18, 0.92);
+      --radius: 12px;
     }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body, html {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      font-family: var(--font-family);
-      background-color: #05050a;
-      color: #ffffff;
-      -webkit-user-select: none;
-      user-select: none;
+      width: 100%; height: 100%; overflow: hidden;
+      font-family: var(--font); background: #05050a; color: #fff;
+      -webkit-user-select: none; user-select: none;
     }
 
-    /* Front-camera selfie video (behind the WebGL canvas) */
-    #selfie-video {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: 0;
-      display: none;
-      transform: scaleX(-1);
-    }
-
-    /* Fullscreen AR camera canvas */
+    /* --- Canvas --- */
     #camerafeed {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-      display: block;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 1; display: block;
     }
 
-    /* HUD Overlay Layer */
-    #hud-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      pointer-events: none; /* Let clicks pass to canvas */
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      box-sizing: border-box;
-      padding: 20px;
+    /* --- Menu Screen --- */
+    #menu-screen {
+      position: absolute; inset: 0; z-index: 200;
+      background: radial-gradient(circle at center, #150f2d, #05050a);
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      padding: 32px; text-align: center;
     }
+    .menu-logo {
+      font-size: 2.2rem; font-weight: 800;
+      background: linear-gradient(45deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .menu-sub {
+      font-size: 0.8rem; color: #666; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600; margin-bottom: 36px;
+    }
+    .menu-cards {
+      display: flex; flex-direction: column; gap: 16px;
+      width: 100%; max-width: 320px;
+    }
+    .menu-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 24px;
+      cursor: pointer; transition: all 0.2s ease;
+      text-align: left;
+    }
+    .menu-card:active { transform: scale(0.97); }
+    .menu-card-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .menu-card-title { font-size: 1rem; font-weight: 800; margin-bottom: 6px; }
+    .menu-card-desc { font-size: 0.8rem; color: #888; line-height: 1.4; }
+    .menu-card.mascot { border-color: rgba(0,242,254,0.2); }
+    .menu-card.mascot:active { border-color: var(--cyan); }
+    .menu-card.mask { border-color: rgba(138,43,226,0.2); }
+    .menu-card.mask:active { border-color: var(--purple); }
 
-    /* Enable pointers for interactive HUD items */
-    .interactive-hud {
-      pointer-events: auto;
-    }
-
-    /* Glassmorphism containers */
-    .glass-panel {
-      background: var(--color-background-glass);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-      border-radius: var(--border-radius);
-      padding: 15px 20px;
-      transition: all var(--transition-duration) ease;
-    }
-
-    /* Header styling */
-    .hud-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      width: 100%;
-    }
-
-    .brand-title {
-      font-weight: 800;
-      font-size: 1.2rem;
-      background: linear-gradient(45deg, var(--color-secondary), var(--color-primary));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    .stats-container {
-      display: flex;
-      gap: 15px;
-    }
-
-    .stat-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      background: rgba(255, 255, 255, 0.05);
-      padding: 6px 12px;
-      border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .stat-badge .icon {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-    
-    .stat-badge.points .icon {
-      background-color: var(--color-secondary);
-      box-shadow: 0 0 8px var(--color-secondary);
-    }
-
-    .stat-badge.progress .icon {
-      background-color: var(--color-primary);
-      box-shadow: 0 0 8px var(--color-primary);
-    }
-
-    /* Clue container at bottom */
-    .hud-footer {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-      margin-bottom: env(safe-area-inset-bottom, 0px);
-    }
-
-    .clue-panel {
-      text-align: center;
-      max-width: 500px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    .clue-label {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--color-secondary);
-      font-weight: 800;
-      margin-bottom: 4px;
-    }
-
-    .clue-text {
-      font-size: 0.95rem;
-      font-weight: 600;
-      line-height: 1.4;
-    }
-
-    /* Modal dialog styling */
-    .modal-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(5, 5, 10, 0.85);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      padding: 30px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity var(--transition-duration) ease;
-    }
-
-    .modal-overlay.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .modal-box {
-      width: 100%;
-      max-width: 400px;
-      background: var(--color-background-glass-solid);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 24px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.7);
-      padding: 30px;
-      text-align: center;
-      box-sizing: border-box;
-      transform: scale(0.9);
-      transition: transform var(--transition-duration) cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .modal-overlay.active .modal-box {
-      transform: scale(1);
-    }
-
-    .modal-header {
-      font-size: 0.8rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 3px;
-      color: var(--color-secondary);
-      margin-bottom: 10px;
-      animation: pulse-cyan 2s infinite;
-    }
-
-    .modal-title {
-      font-size: 1.6rem;
-      font-weight: 800;
-      margin-bottom: 15px;
-      background: linear-gradient(45deg, #ffffff, #c0c0c0);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .modal-body {
-      font-size: 0.95rem;
-      line-height: 1.5;
-      color: #b0b0bb;
-      margin-bottom: 25px;
-    }
-
-    .reward-badge {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: center;
-      background: linear-gradient(135deg, rgba(0, 242, 254, 0.1), rgba(138, 43, 226, 0.15));
-      border: 1px solid var(--color-primary);
-      box-shadow: 0 0 15px var(--color-primary-glow);
-      padding: 15px 25px;
-      border-radius: var(--border-radius);
-      margin-bottom: 25px;
-    }
-
-    .reward-val {
-      font-size: 1.8rem;
-      font-weight: 800;
-      color: #ffffff;
-      text-shadow: 0 0 10px var(--color-secondary-glow);
-    }
-
-    .reward-label {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--color-secondary);
-      margin-top: 4px;
-      font-weight: 600;
-    }
-
-    .modal-btn {
-      width: 100%;
-      background: linear-gradient(45deg, var(--color-primary), var(--color-secondary));
-      border: none;
-      color: white;
-      font-size: 1rem;
-      font-weight: 700;
-      padding: 14px 20px;
-      border-radius: 30px;
-      cursor: pointer;
-      box-shadow: 0 4px 15px var(--color-primary-glow);
-      transition: all var(--transition-duration) ease;
-    }
-
-    .modal-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px var(--color-secondary-glow);
-    }
-
-    .modal-btn:active {
-      transform: translateY(0);
-    }
-
-    /* Claim Form */
-    .claim-input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 30px;
-      padding: 12px 20px;
-      font-family: var(--font-family);
-      font-size: 0.95rem;
-      color: white;
-      box-sizing: border-box;
-      margin-bottom: 15px;
-      text-align: center;
-      outline: none;
-      transition: border var(--transition-duration);
-    }
-
-    .claim-input:focus {
-      border-color: var(--color-secondary);
-    }
-
-    .promo-code {
-      font-family: monospace;
-      font-size: 1.4rem;
-      letter-spacing: 2px;
-      background: rgba(255, 255, 255, 0.07);
-      padding: 10px 20px;
-      border-radius: 10px;
-      border: 1px dashed var(--color-secondary);
-      display: inline-block;
-      margin-bottom: 20px;
-      color: var(--color-secondary);
-      text-shadow: 0 0 5px var(--color-secondary-glow);
-    }
-
-    /* "Take Selfie" button — shown after mascot is placed on floor */
-    #selfie-btn-container {
-      position: absolute;
-      bottom: 120px;
-      left: 0;
-      width: 100%;
+    /* --- Back button --- */
+    #back-btn {
+      position: absolute; top: 16px; left: 16px;
+      background: var(--glass); backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 8px 16px; border-radius: 20px;
+      font-family: var(--font); font-size: 0.75rem; font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff; z-index: 999; cursor: pointer;
       display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 5;
-      pointer-events: none;
+    }
+    #back-btn:active { transform: scale(0.95); }
+
+    /* --- HUD --- */
+    #score-pill {
+      position: absolute; top: 16px; right: 16px;
+      background: var(--glass); backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
+      border: 1px solid rgba(255,255,255,0.12);
+      z-index: 999; display: none;
+      color: var(--cyan);
     }
 
-    #selfie-btn {
-      pointer-events: auto;
-      max-width: 280px;
-      font-size: 1.1rem;
-      animation: pulse-cyan 2s infinite;
+    #instruction {
+      position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+      background: var(--glass); backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 10px 20px; border-radius: 24px;
+      font-size: 0.8rem; font-weight: 600; text-align: center;
+      border: 1px solid rgba(255,255,255,0.08);
+      z-index: 999; display: none;
+      max-width: 85%; white-space: nowrap;
+      color: rgba(255,255,255,0.9);
     }
 
-    /* Shutter button style */
+    /* --- Found overlay --- */
+    #found-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 10; display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+    }
+    #found-overlay.active { opacity: 1; pointer-events: auto; }
+    .found-card {
+      background: var(--glass-solid);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 28px; text-align: center;
+      max-width: 300px; width: 85%;
+    }
+    .found-label {
+      font-size: 0.65rem; font-weight: 800; letter-spacing: 3px;
+      text-transform: uppercase; color: var(--cyan); margin-bottom: 8px;
+    }
+    .found-title { font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; }
+    .found-pts { font-size: 1.6rem; font-weight: 800; color: var(--cyan); margin-bottom: 6px; }
+    .found-pts-label {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px;
+      color: rgba(255,255,255,0.5); margin-bottom: 20px;
+    }
+    .btn-primary {
+      width: 100%; border: none; color: #fff;
+      font-family: var(--font); font-size: 0.9rem; font-weight: 700;
+      padding: 14px; border-radius: 28px; cursor: pointer;
+      background: linear-gradient(45deg, var(--purple), var(--cyan));
+      box-shadow: 0 4px 15px rgba(138,43,226,0.35);
+    }
+
+    /* --- Shutter --- */
     #shutter-container {
-      position: absolute;
-      bottom: 40px;
-      left: 0;
-      width: 100%;
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 5;
-      pointer-events: none;
+      position: absolute; bottom: 32px; left: 0; width: 100%;
+      display: none; justify-content: center; z-index: 999;
     }
-
     #shutter-btn {
-      width: 70px;
-      height: 70px;
-      border-radius: 50%;
-      background: #ffffff;
-      border: 5px solid var(--color-secondary);
-      box-shadow: 0 0 20px var(--color-secondary);
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #fff; border: 4px solid var(--cyan);
+      box-shadow: 0 0 16px rgba(0,242,254,0.5);
       cursor: pointer;
-      pointer-events: auto;
-      transition: transform 0.1s ease, box-shadow var(--transition-duration);
     }
+    #shutter-btn:active { transform: scale(0.9); }
 
-    #shutter-btn:active {
-      transform: scale(0.9);
-      box-shadow: 0 0 10px var(--color-secondary);
-    }
-
-    /* Fullscreen camera flash effect */
+    /* --- Flash --- */
     #flash-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #ffffff;
-      opacity: 0;
-      z-index: 9;
-      pointer-events: none;
-      transition: opacity 0.15s ease-out;
+      position: absolute; inset: 0;
+      background: #fff; opacity: 0; z-index: 9;
+      pointer-events: none; transition: opacity 0.12s ease-out;
     }
 
-    /* Onboarding Screen styling */
-    #onboarding-screen {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 100;
-      background: radial-gradient(circle at center, #150f2d 0%, #05050a 100%);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      box-sizing: border-box;
-      padding: 40px;
-      text-align: center;
-      transition: opacity var(--transition-duration) ease;
+    /* --- Preview modal --- */
+    #preview-modal {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 1000; display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
     }
-
-    .onboarding-logo {
-      font-size: 3rem;
-      font-weight: 800;
-      background: linear-gradient(45deg, var(--color-secondary), var(--color-primary));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 20px;
-      letter-spacing: 2px;
+    #preview-modal.active { opacity: 1; pointer-events: auto; }
+    .preview-card {
+      background: var(--glass-solid);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 16px;
+      max-width: 360px; width: 100%;
+      display: flex; flex-direction: column; align-items: center;
     }
-
-    .onboarding-box {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: var(--border-radius);
-      padding: 30px;
-      max-width: 400px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+    .preview-frame {
+      width: 100%; border-radius: 12px; overflow: hidden;
+      border: 2px solid var(--cyan); margin-bottom: 16px;
+      aspect-ratio: 9/16; background: #000;
+      display: flex; align-items: center; justify-content: center;
     }
-
-    .onboarding-title {
-      font-size: 1.4rem;
-      font-weight: 800;
-      margin-bottom: 10px;
-      color: #ffffff;
+    .preview-frame img { width: 100%; height: 100%; object-fit: cover; }
+    .preview-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+    .btn-outline {
+      width: 100%; background: transparent;
+      border: 1.5px solid var(--cyan); color: var(--cyan);
+      font-family: var(--font); font-size: 0.85rem; font-weight: 600;
+      padding: 12px; border-radius: 24px; cursor: pointer;
     }
-
-    .onboarding-desc {
-      font-size: 0.95rem;
-      line-height: 1.6;
-      color: #a0a0b0;
-      margin-bottom: 30px;
-    }
-
-    /* Photo preview modal */
-    #preview-modal .preview-box {
-      width: 100%;
-      max-width: 420px;
-      background: var(--color-background-glass-solid);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 24px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      box-sizing: border-box;
-    }
-
-    #preview-img-container {
-      width: 100%;
-      border-radius: 16px;
-      overflow: hidden;
-      border: 2px solid var(--color-secondary);
-      margin-bottom: 20px;
-      aspect-ratio: 9 / 16;
-      background-color: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #preview-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .preview-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      width: 100%;
-    }
-
-    .btn-secondary {
-      background: transparent;
-      border: 2px solid var(--color-secondary);
-      color: var(--color-secondary);
-      box-shadow: none;
-    }
-
-    .btn-secondary:hover {
-      box-shadow: 0 0 10px var(--color-secondary-glow);
-      background: rgba(0, 242, 254, 0.05);
-    }
-
-    .btn-text {
-      background: none;
-      border: none;
-      color: #a0a0b0;
-      font-size: 0.9rem;
-      cursor: pointer;
-      margin-top: 8px;
-      font-weight: 600;
-      text-decoration: underline;
-    }
-
-    /* Keyframes animations */
-    @keyframes pulse-cyan {
-      0% { text-shadow: 0 0 2px var(--color-secondary-glow); }
-      50% { text-shadow: 0 0 8px var(--color-secondary); }
-      100% { text-shadow: 0 0 2px var(--color-secondary-glow); }
+    .btn-ghost {
+      background: none; border: none; color: #888;
+      font-family: var(--font); font-size: 0.8rem; cursor: pointer;
+      text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-DpHuO-6C.js"></script>
+  <script type="module" crossorigin src="./assets/index-DV4AePU7.js"></script>
 </head>
 <body>
-  <!-- On-screen console debugger for mobile unhandled exceptions -->
-  <div id="error-console" style="position: absolute; top: 0; left: 0; width: 100%; max-height: 60%; overflow-y: auto; background: rgba(100, 0, 0, 0.95); color: #ffcccc; z-index: 99999; font-family: monospace; font-size: 11px; padding: 15px; display: none; box-sizing: border-box; border-bottom: 2px solid red; pointer-events: auto; word-wrap: break-word;">
-  </div>
-  <script>
-    const errConsole = document.getElementById('error-console');
-    errConsole.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0; color:#fff;">⚠️ Mobile Debug Console</h3><button onclick="document.getElementById(\'error-console\').style.display=\'none\'" style="background:#fff; color:#a00; border:none; padding:2px 8px; border-radius:4px; font-weight:bold; cursor:pointer;">Close</button></div>';
 
-    function logError(title, details) {
-      errConsole.style.display = 'block';
-      errConsole.innerHTML += '<div style="margin-bottom:10px;"><b>' + title + ':</b> ' + details + '</div><hr style="border:0; border-top:1px solid rgba(255,255,255,0.2);">';
-    }
-
-    window.onerror = function(message, source, lineno, colno, error) {
-      let stack = (error && error.stack) ? error.stack : 'N/A';
-      logError('Unhandled Error', message + '<br><b>File:</b> ' + source + ':' + lineno + ':' + colno + '<br><b>Stack:</b> ' + stack);
-      return false;
-    };
-
-    window.addEventListener('unhandledrejection', function(event) {
-      const reason = event.reason;
-      let details = reason;
-      if (reason instanceof Event) {
-        details = 'Event of type "' + reason.type + '"';
-        if (reason.target) {
-          details += ' on <' + (reason.target.tagName || '').toLowerCase() + '>';
-          if (reason.target.src) details += ' src="' + reason.target.src + '"';
-          if (reason.target.href) details += ' href="' + reason.target.href + '"';
-        }
-      } else if (reason && typeof reason === 'object') {
-        try {
-          details = JSON.stringify(reason);
-        } catch(e) {
-          details = String(reason);
-        }
-      }
-      let stack = (reason && reason.stack) ? reason.stack : 'N/A';
-      logError('Promise Rejection', details + '<br><b>Stack:</b> ' + stack);
-    });
-
-    window.addEventListener('error', function(event) {
-      if (event.message) return; // Ignore runtime errors logged by window.onerror
-      const target = event.target || event.srcElement;
-      if (target) {
-        let details = 'Failed to load resource: ';
-        if (target.tagName) {
-          details += '<' + target.tagName.toLowerCase() + '>';
-          if (target.src) details += ' src="' + target.src + '"';
-          if (target.href) details += ' href="' + target.href + '"';
-        } else {
-          details += String(target);
-        }
-        logError('Resource Load Error', details);
-      }
-    }, true);
-  </script>
-
-  <!-- Front-camera selfie video (behind the WebGL canvas) -->
-  <video id="selfie-video" playsinline autoplay muted></video>
-
-  <!-- The main canvas used for WebGL drawing by the app -->
   <canvas id="camerafeed"></canvas>
 
-  <!-- HUD Overlay -->
-  <div id="hud-overlay">
-    <!-- Header panel -->
-    <div class="hud-header interactive-hud">
-      <div class="glass-panel hud-header">
-        <div class="brand-title">QuestAR</div>
-        <div class="stats-container">
-          <div class="stat-badge points">
-            <span class="icon"></span>
-            <span id="score-text">0 PTS</span>
-          </div>
-          <div class="stat-badge progress">
-            <span class="icon"></span>
-            <span id="progress-text">0/1</span>
-          </div>
-        </div>
+  <!-- Menu Screen (shown before camera starts) -->
+  <div id="menu-screen">
+    <div class="menu-logo">BENCHMARK</div>
+    <div class="menu-sub">Choose your experience</div>
+    <div class="menu-cards">
+      <div class="menu-card mascot" id="mascot-card">
+        <div class="menu-card-icon">&#x1f680;</div>
+        <div class="menu-card-title">Find the Mascot</div>
+        <div class="menu-card-desc">Scan a target, place the mascot on the floor, and snap a photo!</div>
       </div>
-    </div>
-
-    <!-- Footer panel -->
-    <div class="hud-footer interactive-hud">
-      <div class="glass-panel clue-panel">
-        <div class="clue-label">Active Objective</div>
-        <div class="clue-text" id="clue-text">Locate and scan the Mascot Decal to start your scavenger hunt!</div>
+      <div class="menu-card mask" id="mask-card">
+        <div class="menu-card-icon">&#x1f3ad;</div>
+        <div class="menu-card-title">Try the Mask</div>
+        <div class="menu-card-desc">Use the front camera to wear the mascot mask on your face!</div>
       </div>
     </div>
   </div>
 
-  <!-- Onboarding Screen -->
-  <div id="onboarding-screen">
-    <div class="onboarding-logo">QuestAR</div>
-    <div class="onboarding-box">
-      <div class="onboarding-title">Arena Scavenger Hunt</div>
-      <div class="onboarding-desc">
-        Welcome to the Benchmark experience! Walk around the arena, locate the Mascot Decal (Atomic Cover), and scan it to spawn the life-sized team mascot. Take a photo to claim your prize!
-      </div>
-      <button class="modal-btn" id="onboarding-btn">START EXPERIENCE</button>
+  <!-- Back button (visible during experience) -->
+  <button id="back-btn">Back</button>
+
+  <!-- HUD -->
+  <div id="score-pill"></div>
+  <div id="instruction"></div>
+
+  <!-- Found overlay -->
+  <div id="found-overlay">
+    <div class="found-card">
+      <div class="found-label">Target Found</div>
+      <div class="found-title">Mascot Unlocked!</div>
+      <div class="found-pts" id="found-points">+150</div>
+      <div class="found-pts-label">Points</div>
+      <button class="btn-primary" id="found-btn">Place Mascot</button>
     </div>
   </div>
 
-  <!-- "Take Selfie" Button (shown after mascot placed on floor) -->
-  <div id="selfie-btn-container">
-    <button class="modal-btn" id="selfie-btn">Take Selfie</button>
-  </div>
+  <!-- Shutter -->
+  <div id="shutter-container"><button id="shutter-btn"></button></div>
 
-  <!-- Camera Shutter Button Overlay -->
-  <div id="shutter-container">
-    <button id="shutter-btn"></button>
-  </div>
-
-  <!-- Fullscreen Camera Flash Layer -->
+  <!-- Flash -->
   <div id="flash-container"></div>
 
-  <!-- Snapshot Photo Preview Modal -->
-  <div id="preview-modal" class="modal-overlay">
-    <div class="preview-box">
-      <div class="modal-header">Selfie Snapshot</div>
-      <div id="preview-img-container">
-        <img id="preview-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Mascot Selfie">
+  <!-- Preview -->
+  <div id="preview-modal">
+    <div class="preview-card">
+      <div class="preview-frame">
+        <img id="preview-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Photo">
       </div>
       <div class="preview-actions">
-        <button class="modal-btn" id="share-btn">Share to Socials</button>
-        <button class="modal-btn btn-secondary" id="download-btn">Save to Device</button>
-        <button class="btn-text" id="close-preview-btn">Take Another Photo</button>
+        <button class="btn-primary" id="share-btn">Share</button>
+        <button class="btn-outline" id="download-btn">Save to Device</button>
+        <button class="btn-ghost" id="close-preview-btn">Retake</button>
       </div>
     </div>
   </div>
 
-  <!-- Target Found Modal Popup -->
-  <div id="found-modal" class="modal-overlay">
-    <div class="modal-box">
-      <div class="modal-header">Scan Success</div>
-      <div class="modal-title" id="found-title">Sponsor Target Unlocked!</div>
-      <div class="modal-body" id="found-body">You successfully scanned the book target and unlocked its secrets!</div>
-      <div class="reward-badge">
-        <div class="reward-val" id="found-points">+50</div>
-        <div class="reward-label">Points Awarded</div>
-      </div>
-      <button class="modal-btn" id="found-btn">Continue Quest</button>
-    </div>
-  </div>
-
-  <!-- Game Over Completion Modal Popup -->
-  <div id="gameover-modal" class="modal-overlay">
-    <div class="modal-box">
-      <div class="modal-header" style="color: gold; animation: none;">CONGRATULATIONS</div>
-      <div class="modal-title">Hunt Completed! 🏆</div>
-      <div class="modal-body">
-        You successfully found all 3 markers across the arena! Here is your exclusive sponsor discount code:
-      </div>
-      <div class="promo-code" id="promo-code">ARENA-HERO-99</div>
-      <input type="email" class="claim-input" id="claim-email" placeholder="Enter email to enter giveaway" required>
-      <button class="modal-btn" id="claim-btn">Enter Giveaway</button>
-    </div>
-  </div>
-
-  <!-- Loader script -->
 </body>
 </html>
