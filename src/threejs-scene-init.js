@@ -72,14 +72,15 @@ export const initScenePipelineModule = (gameState, uiManager) => {
 
         // Set scale dynamically to standard human size (1.8m height)
         // Since 1 unit = 0.21m, 1.8m = 1.8 * UNITS_PER_METER = ~8.57 units.
+        // As requested by user, we multiply this size by 4.0 to make it giant.
         const rawHeight = size.y
         if (rawHeight > 0) {
-          const targetHeight = 1.8 * UNITS_PER_METER
+          const targetHeight = 1.8 * UNITS_PER_METER * 4.0
           const scaleFactor = targetHeight / rawHeight
           mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
-          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~1.8m)`)
+          console.log(`[AR] Mascot dynamically scaled by factor ${scaleFactor} to height ${targetHeight} units (~7.2m)`)
         } else {
-          mascotModel.scale.set(6.0, 6.0, 6.0) // Fallback if height check fails
+          mascotModel.scale.set(24.0, 24.0, 24.0) // Fallback if height check fails
         }
         mascotModel.visible = false // Hide until decal is scanned
         
@@ -192,9 +193,9 @@ export const initScenePipelineModule = (gameState, uiManager) => {
             dir.y = 0
             dir.normalize()
 
-            // 3. Set the spawn position 1.5 meters behind the target (away from the camera)
-            // 1.5m in units is 1.5 * UNITS_PER_METER
-            const offsetDistance = 1.5 * UNITS_PER_METER
+            // 3. Set the spawn position 3.5 meters behind the target (away from the camera)
+            // 3.5m in units is 3.5 * UNITS_PER_METER (offset further back to fit the 4x larger size)
+            const offsetDistance = 3.5 * UNITS_PER_METER
             const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
             
             // 4. Ground the mascot at the same height as the target (the floor)
