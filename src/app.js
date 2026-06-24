@@ -49,7 +49,6 @@ const onxrloaded = () => {
   XR8.addCameraPipelineModules([
     XR8.GlTextureRenderer.pipelineModule(),
     XR8.Threejs.pipelineModule(),
-    XR8.XrController.pipelineModule(),  // Restored to resolve Threejs.pipelineModule dependency
     faceController,
     LandingPage.pipelineModule(),
     XRExtras.FullWindowCanvas.pipelineModule(),
