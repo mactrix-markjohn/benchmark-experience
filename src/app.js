@@ -48,10 +48,13 @@ if (!mode) {
       s.src = './external/xr/xr-face.js'
       s.onload = () => {
         try {
+          XR8.FaceController.configure({maxDetections: 1})
+
           XR8.addCameraPipelineModules([
             XR8.GlTextureRenderer.pipelineModule(),
             XR8.Threejs.pipelineModule(),
             XR8.FaceController.pipelineModule(),
+            LandingPage.pipelineModule(),
             XRExtras.FullWindowCanvas.pipelineModule(),
             XRExtras.Loading.pipelineModule(),
             XRExtras.RuntimeError.pipelineModule(),
