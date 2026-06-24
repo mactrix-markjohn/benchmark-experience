@@ -115,32 +115,36 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     camera.position.set(0, 2, 3)
   }
 
+  // Estimate how high the phone is held above the floor (~1.3m typical)
+  const CAMERA_HEIGHT_M = 1.3
+  const CAMERA_HEIGHT_UNITS = CAMERA_HEIGHT_M * UNITS_PER_METER
+
   // Helper to update the mascot's position and rotation relative to the target pose
   const updateMascotPose = (position, rotation) => {
     if (!mascotModel || !xrCamera) return
 
-    // 1. Get camera world position
     const cameraPos = new THREE.Vector3()
     xrCamera.getWorldPosition(cameraPos)
 
-    // 2. Calculate direction from camera to target projected on the horizontal floor plane (Y = 0)
+    // Estimate the floor Y: camera is ~1.3m above the ground
+    const floorY = cameraPos.y - CAMERA_HEIGHT_UNITS
+
+    // Direction from camera to target on the horizontal plane
     const targetPos = new THREE.Vector3().copy(position)
     const dir = new THREE.Vector3().subVectors(targetPos, cameraPos)
     dir.y = 0
     dir.normalize()
 
-    // 3. Set the spawn position 1.5 meters behind the target (away from the camera)
-    const offsetDistance = 1.5 * UNITS_PER_METER
-    const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, offsetDistance)
-    
-    // 4. Ground the mascot on the SLAM floor plane (Y=0).
-    // rawMinY is the model's lowest vertex in local space; after scaling,
-    // subtracting it places the feet exactly at Y=0.
-    spawnPos.y = -(rawMinY * scaleFactor)
+    // Place mascot 0.5m in front of the wall target (toward the camera)
+    const offsetDistance = 0.5 * UNITS_PER_METER
+    const spawnPos = new THREE.Vector3().copy(targetPos).addScaledVector(dir, -offsetDistance)
+
+    // Ground feet on the estimated floor
+    spawnPos.y = floorY - (rawMinY * scaleFactor)
 
     mascotModel.position.copy(spawnPos)
 
-    // 5. Look at the camera, locking the Y-axis so the mascot stands upright
+    // Face the camera, locked upright on Y-axis
     const lookTarget = new THREE.Vector3(cameraPos.x, spawnPos.y, cameraPos.z)
     mascotModel.lookAt(lookTarget)
   }
