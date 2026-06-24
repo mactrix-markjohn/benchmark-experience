@@ -206,6 +206,45 @@
   <script type="module" crossorigin src="./assets/index-D6ppvFfa.js"></script>
 </head>
 <body>
+  <div id="debug-log-panel" style="position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.85); color: #ff3333; font-family: monospace; font-size: 10px; padding: 10px; border-radius: 8px; z-index: 99999; max-height: 200px; overflow-y: auto; word-break: break-all; border: 1px solid red;">
+    <strong>Debug Log:</strong><br>
+  </div>
+  <script>
+    (function() {
+      const panel = document.getElementById('debug-log-panel');
+      function log(msg) {
+        panel.innerHTML += msg + '<br>';
+        panel.scrollTop = panel.scrollHeight;
+      }
+      window.logToScreen = log;
+      window.addEventListener('error', function(e) {
+        log('ERR: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        log('REJ: ' + e.reason);
+      });
+      const originalConsoleError = console.error;
+      console.error = function() {
+        log('CON_ERR: ' + Array.prototype.slice.call(arguments).join(' '));
+        originalConsoleError.apply(console, arguments);
+      };
+      const originalConsoleWarn = console.warn;
+      console.warn = function() {
+        log('CON_WARN: ' + Array.prototype.slice.call(arguments).join(' '));
+        originalConsoleWarn.apply(console, arguments);
+      };
+      log('Debugger initialized. UA: ' + navigator.userAgent);
+      log('XR8 status: ' + (typeof window.XR8));
+      window.addEventListener('xrloaded', function() {
+        log('xrloaded event fired. XR8 status: ' + (typeof window.XR8));
+      });
+      document.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK' || e.target.tagName === 'IMG')) {
+          log('NET_ERR: Failed to load ' + e.target.tagName + ' from ' + (e.target.src || e.target.href));
+        }
+      }, true);
+    })();
+  </script>
 
   <canvas id="camerafeed"></canvas>
 
