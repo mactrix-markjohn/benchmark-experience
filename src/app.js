@@ -13,7 +13,6 @@ const onxrloaded = () => {
 
   // Configure FaceController upfront
   XR8.FaceController.configure({
-    meshGeometry: [XR8.FaceController.MeshGeometry.FACE],
     maxDetections: 1,
   })
 
