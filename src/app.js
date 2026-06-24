@@ -36,6 +36,11 @@ const onxrloaded = () => {
     maxDetections: 1,
   })
 
+  // Configure XrController to disable world tracking since we are using front camera
+  XR8.XrController.configure({
+    disableWorldTracking: true,
+  })
+
   // Store pipeline module references
   const faceController = XR8.FaceController.pipelineModule()
   const maskModule = initFaceMaskModule(uiManager)
