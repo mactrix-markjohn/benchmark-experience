@@ -50,11 +50,6 @@ export const initFaceMaskModule = (uiManager) => {
     onStart: () => {
       const {scene, camera, renderer} = XR8.Threejs.xrScene()
       initScene({scene, camera, renderer})
-
-      XR8.XrController.updateCameraProjectionMatrix({
-        origin: camera.position,
-        facing: camera.quaternion
-      })
     },
 
     onUpdate: () => {

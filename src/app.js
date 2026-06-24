@@ -33,21 +33,30 @@ const onxrloaded = () => {
     const s = document.createElement('script')
     s.src = './external/xr/xr-face.js'
     s.onload = () => {
-      XR8.FaceController.configure({meshGeometry: []})
+      try {
+        console.log('[Mask] FaceController available:', !!XR8.FaceController)
 
-      XR8.addCameraPipelineModules([
-        XR8.GlTextureRenderer.pipelineModule(),
-        XR8.Threejs.pipelineModule(),
-        XR8.FaceController.pipelineModule(),
-        XRExtras.FullWindowCanvas.pipelineModule(),
-        XRExtras.Loading.pipelineModule(),
-        XRExtras.RuntimeError.pipelineModule(),
-        initFaceMaskModule(uiManager),
-      ])
+        XR8.addCameraPipelineModules([
+          XR8.GlTextureRenderer.pipelineModule(),
+          XR8.Threejs.pipelineModule(),
+          XR8.FaceController.pipelineModule(),
+          XRExtras.FullWindowCanvas.pipelineModule(),
+          XRExtras.Loading.pipelineModule(),
+          XRExtras.RuntimeError.pipelineModule(),
+          initFaceMaskModule(uiManager),
+        ])
 
-      XR8.run({canvas: document.getElementById('camerafeed')})
-      uiManager.showInstruction('Point the camera at your face!')
-      uiManager.showShutterButton()
+        XR8.run({canvas: document.getElementById('camerafeed')})
+        uiManager.showInstruction('Point the camera at your face!')
+        uiManager.showShutterButton()
+      } catch (err) {
+        console.error('[Mask] Init error:', err)
+        uiManager.showInstruction('Face tracking failed: ' + err.message)
+      }
+    }
+    s.onerror = () => {
+      console.error('[Mask] Failed to load xr-face.js')
+      uiManager.showInstruction('Failed to load face tracking module')
     }
     document.head.appendChild(s)
 
