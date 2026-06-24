@@ -95,11 +95,13 @@ export class UIManager {
     const gl = document.getElementById('camerafeed')
     if (!video || !gl) return
 
-    // Use the screen dimensions so video and WebGL layers align perfectly
+    // Use CSS pixel dimensions (what the user actually sees on screen)
+    // to keep video and WebGL layers aligned without stretching
     const c = document.createElement('canvas')
     const ctx = c.getContext('2d')
-    const w = gl.width
-    const h = gl.height
+    const dpr = window.devicePixelRatio || 1
+    const w = Math.round(window.innerWidth * dpr)
+    const h = Math.round(window.innerHeight * dpr)
     c.width = w
     c.height = h
 
