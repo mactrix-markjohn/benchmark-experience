@@ -11,6 +11,13 @@ const onxrloaded = () => {
   const gameState = new GameState()
   const uiManager = new UIManager(gameState)
 
+  // Global error handler to catch and display mobile safari runtime errors
+  window.onerror = (message, source, lineno, colno, error) => {
+    const errorStr = `${message} at ${source}:${lineno}:${colno}`
+    alert(errorStr)
+    uiManager.showInstruction(errorStr)
+  }
+
   // Configure FaceController upfront
   XR8.FaceController.configure({
     maxDetections: 1,

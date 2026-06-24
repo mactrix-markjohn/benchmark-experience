@@ -16,7 +16,9 @@ export const initFaceMaskModule = (uiManager) => {
     mixers.length = 0
 
     // Front-facing light for the mask
-    scene.add(new THREE.DirectionalLight(0xffffff, 1.2).translateZ(5).translateY(3))
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2)
+    dirLight.position.set(0, 3, 5)
+    scene.add(dirLight)
     scene.add(new THREE.AmbientLight(0xffffff, 0.8))
 
     new GLTFLoader().load('assets/trappermask.glb', (gltf) => {
