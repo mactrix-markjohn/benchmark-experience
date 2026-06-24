@@ -54,7 +54,7 @@ if (!mode) {
             XR8.GlTextureRenderer.pipelineModule(),
             XR8.Threejs.pipelineModule(),
             XR8.FaceController.pipelineModule(),
-            LandingPage.pipelineModule(),
+            XRExtras.AlmostThere.pipelineModule(),
             XRExtras.FullWindowCanvas.pipelineModule(),
             XRExtras.Loading.pipelineModule(),
             XRExtras.RuntimeError.pipelineModule(),
