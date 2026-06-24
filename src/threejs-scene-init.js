@@ -61,7 +61,7 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       rawMinY = box.min.y
 
       const rawHeight = size.y
-      const targetHeight = 2.6 * UNITS_PER_METER
+      const targetHeight = 1.3 * UNITS_PER_METER
       scaleFactor = rawHeight > 0 ? targetHeight / rawHeight : 6.0
       mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
       mascotModel.visible = false
