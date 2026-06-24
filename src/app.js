@@ -12,6 +12,18 @@ import targetAtomic from '../image-targets/image-target-atomic.json'
 import targetBackPower from '../image-targets/image-target-back-power.json'
 
 let currentMode = null // 'mascot' or 'mask'
+let faceModuleLoaded = false
+
+const loadFaceModule = () => {
+  return new Promise((resolve, reject) => {
+    if (faceModuleLoaded) { resolve(); return }
+    const s = document.createElement('script')
+    s.src = './external/xr/xr-face.js'
+    s.onload = () => { faceModuleLoaded = true; resolve() }
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+}
 
 const startMascotMode = (gameState, uiManager) => {
   if (currentMode === 'mascot') return
@@ -37,10 +49,12 @@ const startMascotMode = (gameState, uiManager) => {
   uiManager.showInstruction('Scan the Mascot Decal to begin')
 }
 
-const startMaskMode = (uiManager) => {
+const startMaskMode = async (uiManager) => {
   if (currentMode === 'mask') return
   if (currentMode) XR8.stop()
   currentMode = 'mask'
+
+  await loadFaceModule()
 
   XR8.FaceController.configure({meshGeometry: []})
 
