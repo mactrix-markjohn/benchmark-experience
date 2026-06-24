@@ -193,7 +193,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
           const {name, position} = detail
           if (name !== 'image-target-atomic') return
 
-          // Always track the target position for drift correction
           lastTargetPos = new THREE.Vector3().copy(position)
 
           if (currentState === STATE.SCANNING) {
@@ -205,10 +204,7 @@ export const initScenePipelineModule = (gameState, uiManager) => {
             activateExperience()
           }
 
-          // If mascot is already placed, correct its position
-          if (currentState === STATE.PLACED) {
-            correctDrift(lastTargetPos)
-          }
+          if (currentState === STATE.PLACED) correctDrift(lastTargetPos)
         }
       },
       {
@@ -220,10 +216,14 @@ export const initScenePipelineModule = (gameState, uiManager) => {
 
           lastTargetPos = new THREE.Vector3().copy(position)
 
-          // Continuously correct drift while the target is visible
-          if (currentState === STATE.PLACED) {
-            correctDrift(lastTargetPos)
+          // If still waiting for model to load, try again now
+          if (currentState === STATE.SCANNING && pendingActivation && mascotModel) {
+            pendingActivation = false
+            activateExperience()
+            return
           }
+
+          if (currentState === STATE.PLACED) correctDrift(lastTargetPos)
         }
       },
       {
