@@ -12,80 +12,80 @@ import targetAtomic from '../image-targets/image-target-atomic.json'
 import targetBackPower from '../image-targets/image-target-back-power.json'
 
 const params = new URLSearchParams(window.location.search)
-const mode = params.get('mode') || 'mascot'
+const mode = params.get('mode')
 
-const onxrloaded = () => {
-  const gameState = new GameState()
-  const uiManager = new UIManager(gameState)
+// If no mode selected, show the menu and wait
+if (!mode) {
+  const menu = document.getElementById('menu-screen')
+  const onboarding = document.getElementById('onboarding-screen')
+  if (onboarding) onboarding.style.display = 'none'
+  if (menu) menu.style.display = 'flex'
+} else {
+  // Hide menu, show onboarding briefly then start
+  const menu = document.getElementById('menu-screen')
+  if (menu) menu.style.display = 'none'
 
-  const toggleBtn = document.getElementById('mode-toggle')
+  const onxrloaded = () => {
+    const gameState = new GameState()
+    const uiManager = new UIManager(gameState)
 
-  if (mode === 'mask') {
-    // --- Face Mask Mode ---
-    if (toggleBtn) {
-      toggleBtn.innerText = 'Find Mascot'
-      toggleBtn.addEventListener('click', () => {
+    // Back button returns to menu
+    const backBtn = document.getElementById('back-btn')
+    if (backBtn) {
+      backBtn.style.display = 'block'
+      backBtn.addEventListener('click', () => {
         window.location.href = window.location.pathname
       })
     }
 
-    // Load face module then start
-    const s = document.createElement('script')
-    s.src = './external/xr/xr-face.js'
-    s.onload = () => {
-      try {
-        console.log('[Mask] FaceController available:', !!XR8.FaceController)
+    // Hide onboarding for mode starts
+    const onboarding = document.getElementById('onboarding-screen')
+    if (onboarding) onboarding.style.display = 'none'
 
-        XR8.addCameraPipelineModules([
-          XR8.GlTextureRenderer.pipelineModule(),
-          XR8.Threejs.pipelineModule(),
-          XR8.FaceController.pipelineModule(),
-          XRExtras.FullWindowCanvas.pipelineModule(),
-          XRExtras.Loading.pipelineModule(),
-          XRExtras.RuntimeError.pipelineModule(),
-          initFaceMaskModule(uiManager),
-        ])
-
-        XR8.run({canvas: document.getElementById('camerafeed')})
-        uiManager.showInstruction('Point the camera at your face!')
-        uiManager.showShutterButton()
-      } catch (err) {
-        console.error('[Mask] Init error:', err)
-        uiManager.showInstruction('Face tracking failed: ' + err.message)
+    if (mode === 'mask') {
+      // Load face module then start
+      const s = document.createElement('script')
+      s.src = './external/xr/xr-face.js'
+      s.onload = () => {
+        try {
+          XR8.addCameraPipelineModules([
+            XR8.GlTextureRenderer.pipelineModule(),
+            XR8.Threejs.pipelineModule(),
+            XR8.FaceController.pipelineModule(),
+            XRExtras.FullWindowCanvas.pipelineModule(),
+            XRExtras.Loading.pipelineModule(),
+            XRExtras.RuntimeError.pipelineModule(),
+            initFaceMaskModule(uiManager),
+          ])
+          XR8.run({canvas: document.getElementById('camerafeed')})
+          uiManager.showInstruction('Point the camera at your face!')
+          uiManager.showShutterButton()
+        } catch (err) {
+          console.error('[Mask] Init error:', err)
+          uiManager.showInstruction('Face tracking error: ' + err.message)
+        }
       }
-    }
-    s.onerror = () => {
-      console.error('[Mask] Failed to load xr-face.js')
-      uiManager.showInstruction('Failed to load face tracking module')
-    }
-    document.head.appendChild(s)
+      s.onerror = () => uiManager.showInstruction('Failed to load face module')
+      document.head.appendChild(s)
 
-  } else {
-    // --- Mascot Mode (default) ---
-    if (toggleBtn) {
-      toggleBtn.innerText = 'Try Mask'
-      toggleBtn.addEventListener('click', () => {
-        window.location.href = window.location.pathname + '?mode=mask'
+    } else {
+      // Mascot mode
+      XR8.XrController.configure({
+        imageTargetData: [targetAtomic, targetBackPower]
       })
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),
+        XR8.Threejs.pipelineModule(),
+        XR8.XrController.pipelineModule(),
+        LandingPage.pipelineModule(),
+        XRExtras.FullWindowCanvas.pipelineModule(),
+        XRExtras.Loading.pipelineModule(),
+        XRExtras.RuntimeError.pipelineModule(),
+        initScenePipelineModule(gameState, uiManager),
+      ])
+      XR8.run({canvas: document.getElementById('camerafeed')})
     }
-
-    XR8.XrController.configure({
-      imageTargetData: [targetAtomic, targetBackPower]
-    })
-
-    XR8.addCameraPipelineModules([
-      XR8.GlTextureRenderer.pipelineModule(),
-      XR8.Threejs.pipelineModule(),
-      XR8.XrController.pipelineModule(),
-      LandingPage.pipelineModule(),
-      XRExtras.FullWindowCanvas.pipelineModule(),
-      XRExtras.Loading.pipelineModule(),
-      XRExtras.RuntimeError.pipelineModule(),
-      initScenePipelineModule(gameState, uiManager),
-    ])
-
-    XR8.run({canvas: document.getElementById('camerafeed')})
   }
-}
 
-window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
+  window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
+}
