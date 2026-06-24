@@ -105,6 +105,7 @@ export const initFaceMaskModule = (uiManager) => {
           maskModel.position.copy(transform.position)
           maskModel.quaternion.copy(transform.rotation)
           maskModel.scale.set(transform.scale, transform.scale, transform.scale)
+          maskModel.visible = true
         }
       },
       {
