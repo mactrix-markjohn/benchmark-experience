@@ -1,0 +1,22 @@
+{
+  "name": "scavenger-hunt-threejs",
+  "version": "1.0.0",
+  "scripts": {
+    "serve": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "@8thwall/engine-binary": "^1.0.0",
+    "@8thwall/landing-page": "^1.0.0",
+    "@8thwall/xrextras": "^1.0.0",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0",
+    "localtunnel": "^2.0.2",
+    "vite": "^8.0.8"
+  }
+}

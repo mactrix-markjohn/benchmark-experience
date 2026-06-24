@@ -1,0 +1,241 @@
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+
+// Helper to define 3D assets and coordinate target scans with game state & UI
+export const initScenePipelineModule = (gameState, uiManager) => {
+  let mascotPlaced = false
+  let mascotModel = null
+  let placeholderRing = null
+  let mixer = null
+  const mixers = []
+  const clock = new THREE.Clock()
+  
+  // Track 8th Wall scene coordinates
+  let xrScene = null
+  let xrCamera = null
+
+  // Populates lighting, shadows, and default placeholder geometries
+  const initXrScene = ({scene, camera, renderer}) => {
+    renderer.preserveDrawingBuffer = true
+    xrScene = scene
+    xrCamera = camera
+    renderer.shadowMap.enabled = true
+
+    // Add lights for realistic shadows and GLB reflections
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5)
+    directionalLight.position.set(5, 12, 8)
+    directionalLight.castShadow = true
+    
+    // Configure shadow maps for better quality
+    directionalLight.shadow.mapSize.width = 1024
+    directionalLight.shadow.mapSize.height = 1024
+    directionalLight.shadow.camera.near = 0.5
+    directionalLight.shadow.camera.far = 25
+    scene.add(directionalLight)
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    scene.add(ambientLight)
+
+    // Create a neon tracking placeholder ring
+    const ringGeo = new THREE.RingGeometry(0.2, 0.25, 32)
+    ringGeo.rotateX(-Math.PI / 2)
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00f2fe,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.8
+    })
+    placeholderRing = new THREE.Mesh(ringGeo, ringMat)
+    placeholderRing.visible = false
+    scene.add(placeholderRing)
+
+    // Load the life-size mascot asynchronously
+    const loader = new GLTFLoader()
+    const modelUrl = 'assets/AstronautThumbUp.glb'
+    
+    loader.load(
+      modelUrl,
+      (gltf) => {
+        mascotModel = gltf.scene
+        
+        // Print model bounds size for visual scaling reference
+        const box = new THREE.Box3().setFromObject(mascotModel)
+        const size = box.getSize(new THREE.Vector3())
+        console.log(`[AR] Mascot model loaded, bounds size:`, size)
+
+        // Set scale to standard human size (1.8m-2m height)
+        // Adjusting based on raw size. If bounds size height is ~2m, scale is 0.85
+        mascotModel.scale.set(0.85, 0.85, 0.85)
+        mascotModel.visible = false // Hide until decal is scanned
+        
+        // Enable shadow casting for meshes in the model
+        mascotModel.traverse((node) => {
+          if (node.isMesh) {
+            node.castShadow = true
+            node.receiveShadow = true
+          }
+        })
+        
+        scene.add(mascotModel) // Add directly to world scene for SLAM co-existence
+
+        // Prepare GLTF skeletal animation
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(mascotModel)
+          const action = mixer.clipAction(gltf.animations[0])
+          action.play()
+          mixers.push(mixer)
+          console.log(`[AR] Prepared animation "${gltf.animations[0].name}"`)
+        }
+      },
+      undefined,
+      (error) => {
+        console.error(`Error loading mascot model ${modelUrl}:`, error)
+      }
+    )
+
+    camera.position.set(0, 2, 3)
+  }
+
+  // Helper to rotate the mascot to face the camera smoothly on Y-axis
+  const alignMascotToCamera = () => {
+    if (!mascotModel || !xrCamera) return
+    const cameraPos = new THREE.Vector3()
+    xrCamera.getWorldPosition(cameraPos)
+    
+    const mascotPos = new THREE.Vector3()
+    mascotModel.getWorldPosition(mascotPos)
+    
+    // Look at camera position but lock height (Y) to keep the mascot upright
+    const lookTarget = new THREE.Vector3(cameraPos.x, mascotPos.y, cameraPos.z)
+    mascotModel.lookAt(lookTarget)
+  }
+
+  return {
+    name: 'scavenger-hunt-3d-renderer',
+
+    // Runs once when the camera feed starts and the canvas is bound
+    onStart: ({canvas}) => {
+      const {scene, camera, renderer} = XR8.Threejs.xrScene()
+
+      initXrScene({scene, camera, renderer})
+
+      // Sync 8th Wall coordinate system with cameras initial offset
+      XR8.XrController.updateCameraProjectionMatrix({
+        origin: camera.position,
+        facing: camera.quaternion
+      })
+    },
+
+    // Runs every tick (frame update) for animations
+    onUpdate: () => {
+      // Spin the loading placeholder ring
+      if (placeholderRing && placeholderRing.visible) {
+        placeholderRing.rotation.y += 0.015
+      }
+
+      // Update animation mixers with clock delta time
+      const delta = clock.getDelta()
+      mixers.forEach((mixer) => {
+        mixer.update(delta)
+      })
+    },
+
+    // Register target events listeners directly through the pipeline module listeners
+    listeners: [
+      {
+        event: 'reality.imagefound',
+        process: (event) => {
+          const detail = event.detail || event
+          const {name, position, rotation} = detail
+          
+          if (name !== 'image-target-atomic') return
+
+          // Show placeholder loading ring if model is not loaded yet
+          if (!mascotModel && placeholderRing) {
+            placeholderRing.position.copy(position)
+            placeholderRing.quaternion.copy(rotation)
+            placeholderRing.visible = true
+            return
+          }
+
+          // TARGET-TO-SLAM CO-EXISTENCE TRANSITION
+          // If mascot has not been placed yet, lock its coordinate position in world space
+          if (!mascotPlaced && mascotModel) {
+            mascotPlaced = true
+            
+            if (placeholderRing) {
+              placeholderRing.visible = false
+            }
+
+            // 1. Copy the target decal position and rotation
+            mascotModel.position.copy(position)
+            mascotModel.quaternion.copy(rotation)
+            
+            // 2. Rotate the model to stand upright perpendicular to the decal surface
+            mascotModel.rotation.x = Math.PI / 2
+            
+            // 3. Offset the mascot backward (along Z direction) by 1.5 meters
+            // This leaves the floor space around the card free for the fan to stand in.
+            mascotModel.translateZ(-1.5)
+            
+            // 4. Align the mascot to face the camera Y-axis for optimal selfie framing
+            alignMascotToCamera()
+            
+            // 5. Make visible
+            mascotModel.visible = true
+            console.log(`[AR] Mascot placed in world space at:`, mascotModel.position)
+
+            // Award points and check completions via game state
+            const reward = gameState.scanTarget(name)
+            if (reward) {
+              uiManager.updateHUD(
+                reward.totalScore,
+                reward.progress,
+                gameState.totalTargets,
+                reward.nextClue
+              )
+
+              // Open success scan modal overlay
+              uiManager.showFoundModal(
+                reward.title,
+                reward.description,
+                reward.points,
+                () => {
+                  // Show the camera shutter button overlay for taking a selfie
+                  uiManager.showShutterButton()
+                }
+              )
+            }
+          }
+        }
+      },
+      {
+        event: 'reality.imageupdated',
+        process: (event) => {
+          // If we haven't placed the mascot yet, align loading indicator
+          const detail = event.detail || event
+          const {name, position, rotation} = detail
+          if (name === 'image-target-atomic' && !mascotPlaced && placeholderRing) {
+            placeholderRing.position.copy(position)
+            placeholderRing.quaternion.copy(rotation)
+          }
+          // NOTE: We DO NOT update mascotModel coordinates here.
+          // By leaving it untouched, the mascot remains anchored exactly in SLAM space
+          // at its original spawn point, preventing tracking jitters.
+        }
+      },
+      {
+        event: 'reality.imagelost',
+        process: (event) => {
+          const detail = event.detail || event
+          const {name} = detail
+          if (name === 'image-target-atomic' && !mascotPlaced && placeholderRing) {
+            placeholderRing.visible = false
+          }
+          // NOTE: We DO NOT set mascotModel.visible = false here.
+          // The mascot remains visible in the stadium world space even when the decal leaves the frame.
+        }
+      }
+    ]
+  }
+}

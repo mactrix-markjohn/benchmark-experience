@@ -1,0 +1,23 @@
+{
+  "imagePath": "image-targets/image-target-back-power_luminance.jpg",
+  "metadata": null,
+  "name": "image-target-back-power",
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 148,
+    "width": 1996,
+    "height": 2661,
+    "isRotated": false,
+    "originalWidth": 1996,
+    "originalHeight": 2956
+  },
+  "resources": {
+    "originalImage": "image-target-back-power_original.jpg",
+    "croppedImage": "image-target-back-power_cropped.jpg",
+    "thumbnailImage": "image-target-back-power_thumbnail.jpg",
+    "luminanceImage": "image-target-back-power_luminance.jpg"
+  },
+  "created": 1781785962437,
+  "updated": 1781785962437
+}

@@ -1,0 +1,23 @@
+{
+  "imagePath": "image-targets/image-target-atomic_luminance.jpg",
+  "metadata": null,
+  "name": "image-target-atomic",
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 21,
+    "width": 1778,
+    "height": 2371,
+    "isRotated": false,
+    "originalWidth": 1778,
+    "originalHeight": 2413
+  },
+  "resources": {
+    "originalImage": "image-target-atomic_original.jpg",
+    "croppedImage": "image-target-atomic_cropped.jpg",
+    "thumbnailImage": "image-target-atomic_thumbnail.jpg",
+    "luminanceImage": "image-target-atomic_luminance.jpg"
+  },
+  "created": 1781728699604,
+  "updated": 1781728699604
+}
