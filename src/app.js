@@ -43,33 +43,26 @@ if (!mode) {
     if (onboarding) onboarding.style.display = 'none'
 
     if (mode === 'mask') {
-      // Load face module then start
-      const s = document.createElement('script')
-      s.src = './external/xr/xr-face.js'
-      s.onload = () => {
-        try {
-          XR8.FaceController.configure({maxDetections: 1})
+      try {
+        XR8.FaceController.configure({maxDetections: 1})
 
-          XR8.addCameraPipelineModules([
-            XR8.GlTextureRenderer.pipelineModule(),
-            XR8.Threejs.pipelineModule(),
-            XR8.FaceController.pipelineModule(),
-            XRExtras.AlmostThere.pipelineModule(),
-            XRExtras.FullWindowCanvas.pipelineModule(),
-            XRExtras.Loading.pipelineModule(),
-            XRExtras.RuntimeError.pipelineModule(),
-            initFaceMaskModule(uiManager),
-          ])
-          XR8.run({canvas: document.getElementById('camerafeed')})
-          uiManager.showInstruction('Point the camera at your face!')
-          uiManager.showShutterButton()
-        } catch (err) {
-          console.error('[Mask] Init error:', err)
-          uiManager.showInstruction('Face tracking error: ' + err.message)
-        }
+        XR8.addCameraPipelineModules([
+          XR8.GlTextureRenderer.pipelineModule(),
+          XR8.Threejs.pipelineModule(),
+          XR8.FaceController.pipelineModule(),
+          XRExtras.AlmostThere.pipelineModule(),
+          XRExtras.FullWindowCanvas.pipelineModule(),
+          XRExtras.Loading.pipelineModule(),
+          XRExtras.RuntimeError.pipelineModule(),
+          initFaceMaskModule(uiManager),
+        ])
+        XR8.run({canvas: document.getElementById('camerafeed')})
+        uiManager.showInstruction('Point the camera at your face!')
+        uiManager.showShutterButton()
+      } catch (err) {
+        console.error('[Mask] Init error:', err)
+        uiManager.showInstruction('Face tracking error: ' + err.message)
       }
-      s.onerror = () => uiManager.showInstruction('Failed to load face module')
-      document.head.appendChild(s)
 
     } else {
       // Mascot mode

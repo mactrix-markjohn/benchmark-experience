@@ -9,7 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
-  <script src="./external/xr/xr.js?v=3" async data-preload-chunks="slam"></script>
+  <script>
+    // Set preload chunks based on mode before xr.js loads
+    var chunks = 'slam';
+    if (window.location.search.indexOf('mode=mask') !== -1) chunks = 'face';
+    document.write('<script src="./external/xr/xr.js?v=4" async data-preload-chunks="' + chunks + '"><\/script>');
+  </script>
   <script src="https://cdn.8thwall.com/web/xrextras/xrextras.js" crossorigin="anonymous"></script>
   <script src="https://cdn.8thwall.com/web/landing-page/landing-page.js" crossorigin="anonymous"></script>
 
