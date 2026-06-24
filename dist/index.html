@@ -218,14 +218,29 @@
       }
       window.logToScreen = log;
       window.addEventListener('error', function(e) {
-        log('ERR: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+        let msg = 'ERR: ' + e.message + ' at ' + e.filename + ':' + e.lineno;
+        if (e.error && e.error.stack) {
+          msg += '<br>Stack: ' + e.error.stack.replace(/\n/g, '<br>');
+        }
+        log(msg);
       }, true);
       window.addEventListener('unhandledrejection', function(e) {
-        log('REJ: ' + e.reason);
+        let msg = 'REJ: ' + e.reason;
+        if (e.reason && e.reason.stack) {
+          msg += '<br>Stack: ' + e.reason.stack.replace(/\n/g, '<br>');
+        }
+        log(msg);
       });
       const originalConsoleError = console.error;
       console.error = function() {
-        log('CON_ERR: ' + Array.prototype.slice.call(arguments).join(' '));
+        const args = Array.prototype.slice.call(arguments);
+        let msg = 'CON_ERR: ' + args.join(' ');
+        args.forEach(arg => {
+          if (arg && arg.stack) {
+            msg += '<br>Stack: ' + arg.stack.replace(/\n/g, '<br>');
+          }
+        });
+        log(msg);
         originalConsoleError.apply(console, arguments);
       };
       const originalConsoleWarn = console.warn;
