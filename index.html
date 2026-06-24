@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
-  <script src="./external/xr/xr.js?v=5" async data-preload-chunks="slam,face"></script>
+  <script src="./external/xr/xr.js?v=6" async data-preload-chunks="slam,face"></script>
   <script src="https://cdn.8thwall.com/web/xrextras/xrextras.js" crossorigin="anonymous"></script>
   <script src="https://cdn.8thwall.com/web/landing-page/landing-page.js" crossorigin="anonymous"></script>
 
@@ -42,7 +42,7 @@
     #menu-screen {
       position: absolute; inset: 0; z-index: 200;
       background: radial-gradient(circle at center, #150f2d, #05050a);
-      display: none; flex-direction: column;
+      display: flex; flex-direction: column;
       justify-content: center; align-items: center;
       padding: 32px; text-align: center;
     }
@@ -203,7 +203,7 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-CKPgjBut.js"></script>
+  <script type="module" crossorigin src="./assets/index-DOZ4uN16.js"></script>
 </head>
 <body>
 
@@ -214,12 +214,12 @@
     <div class="menu-logo">BENCHMARK</div>
     <div class="menu-sub">Choose your experience</div>
     <div class="menu-cards">
-      <div class="menu-card mascot" onclick="window.location.href=window.location.pathname+'?mode=mascot'">
+      <div class="menu-card mascot" id="mascot-card">
         <div class="menu-card-icon">&#x1f680;</div>
         <div class="menu-card-title">Find the Mascot</div>
         <div class="menu-card-desc">Scan a target, place the mascot on the floor, and snap a photo!</div>
       </div>
-      <div class="menu-card mask" onclick="window.location.href=window.location.pathname+'?mode=mask'">
+      <div class="menu-card mask" id="mask-card">
         <div class="menu-card-icon">&#x1f3ad;</div>
         <div class="menu-card-title">Try the Mask</div>
         <div class="menu-card-desc">Use the front camera to wear the mascot mask on your face!</div>
