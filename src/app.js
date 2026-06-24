@@ -11,80 +11,48 @@ window.THREE.GLTFLoader = GLTFLoader
 import targetAtomic from '../image-targets/image-target-atomic.json'
 import targetBackPower from '../image-targets/image-target-back-power.json'
 
-const onxrloaded = async () => {
+const onxrloaded = () => {
   const gameState = new GameState()
   const uiManager = new UIManager(gameState)
 
   let isFaceMode = false
-  let faceChunkLoaded = false
-
-  // Listen for XR8 stop events to execute pending session restarts
   let pendingRun = null
+
   window.addEventListener('stopxr', () => {
     if (pendingRun) {
-      const fn = pendingRun
+      const runFn = pendingRun
       pendingRun = null
-      setTimeout(fn, 300)
+      setTimeout(runFn, 800)
     }
   })
 
-  // Configure SLAM controller upfront (always available)
+  // Configure both controllers upfront
   XR8.XrController.configure({
     imageTargetData: [targetAtomic, targetBackPower]
   })
 
+  XR8.FaceController.configure({
+    meshGeometry: [XR8.FaceController.MeshGeometry.FACE],
+    maxDetections: 1,
+  })
+
+  // Store pipeline module references for swapping
+  const xrController = XR8.XrController.pipelineModule()
+  const faceController = XR8.FaceController.pipelineModule()
   const mascotModule = initScenePipelineModule(gameState, uiManager)
   const maskModule = initFaceMaskModule(uiManager)
 
-  // Load face chunk on demand (not at startup)
-  const ensureFaceChunk = async () => {
-    if (faceChunkLoaded) return true
-    try {
-      await XR8.loadChunk('face')
-      faceChunkLoaded = true
-      XR8.FaceController.configure({
-        meshGeometry: [XR8.FaceController.MeshGeometry.FACE],
-        maxDetections: 1,
-      })
-      console.log('[App] Face chunk loaded, FaceController:', !!XR8.FaceController)
-      return true
-    } catch (err) {
-      console.error('[App] Failed to load face chunk:', err)
-      uiManager.showInstruction('Face tracking not available on this device')
-      return false
-    }
-  }
-
-  const startSession = (mode) => {
-    const modules = [
-      XR8.GlTextureRenderer.pipelineModule(),
-      XR8.Threejs.pipelineModule(),
-      XRExtras.FullWindowCanvas.pipelineModule(),
-      XRExtras.Loading.pipelineModule(),
-      XRExtras.RuntimeError.pipelineModule(),
-    ]
-
-    if (mode === 'mask') {
-      modules.push(XR8.FaceController.pipelineModule())
-      modules.push(maskModule)
-    } else {
-      modules.push(XR8.XrController.pipelineModule())
-      modules.push(LandingPage.pipelineModule())
-      modules.push(mascotModule)
-    }
-
-    if (XR8.clearCameraPipelineModules) XR8.clearCameraPipelineModules()
-    XR8.addCameraPipelineModules(modules)
-
-    XR8.run({
-      canvas: document.getElementById('camerafeed'),
-      cameraConfig: {
-        direction: mode === 'mask'
-          ? XR8.XrConfig.camera().FRONT
-          : XR8.XrConfig.camera().BACK
-      }
-    })
-  }
+  // Start with all shared modules + mascot mode
+  XR8.addCameraPipelineModules([
+    XR8.GlTextureRenderer.pipelineModule(),
+    XR8.Threejs.pipelineModule(),
+    xrController,
+    LandingPage.pipelineModule(),
+    XRExtras.FullWindowCanvas.pipelineModule(),
+    XRExtras.Loading.pipelineModule(),
+    XRExtras.RuntimeError.pipelineModule(),
+    mascotModule,
+  ])
 
   // Menu handling
   const menuScreen = document.getElementById('menu-screen')
@@ -101,39 +69,55 @@ const onxrloaded = async () => {
     if (menuScreen) menuScreen.style.display = 'flex'
     if (backBtn) backBtn.style.display = 'none'
     uiManager.showInstruction('')
-    const sc = document.getElementById('shutter-container')
-    if (sc) sc.style.display = 'none'
-  }
-
-  let sessionRunning = false
-
-  const switchToMode = (mode) => {
-    if (sessionRunning) {
-      pendingRun = () => {
-        sessionRunning = false
-        startSession(mode)
-        sessionRunning = true
-      }
-      XR8.stop()
-    } else {
-      startSession(mode)
-      sessionRunning = true
-    }
+    const shutterContainer = document.getElementById('shutter-container')
+    if (shutterContainer) shutterContainer.style.display = 'none'
   }
 
   const startMascotMode = () => {
     hideMenu()
-    isFaceMode = false
-    switchToMode('mascot')
+    if (isFaceMode) {
+      pendingRun = () => {
+        XR8.removeCameraPipelineModule(faceController.name)
+        XR8.removeCameraPipelineModule(maskModule.name)
+        XR8.XrController.configure({
+          imageTargetData: [targetAtomic, targetBackPower]
+        })
+        XR8.addCameraPipelineModule(xrController)
+        XR8.addCameraPipelineModule(mascotModule)
+        XR8.run({
+          canvas: document.getElementById('camerafeed'),
+          cameraDirection: 'back',
+          cameraConfig: {
+            direction: XR8.XrConfig.camera().BACK
+          }
+        })
+      }
+      XR8.stop()
+      isFaceMode = false
+    }
     uiManager.showInstruction('Scan the Mascot Decal to begin')
   }
 
-  const startMaskMode = async () => {
+  const startMaskMode = () => {
     hideMenu()
-    const loaded = await ensureFaceChunk()
-    if (!loaded) return
-    isFaceMode = true
-    switchToMode('mask')
+    if (!isFaceMode) {
+      pendingRun = () => {
+        XR8.removeCameraPipelineModule(xrController.name)
+        XR8.removeCameraPipelineModule(mascotModule.name)
+        XR8.addCameraPipelineModule(faceController)
+        XR8.addCameraPipelineModule(maskModule)
+        XR8.run({
+          canvas: document.getElementById('camerafeed'),
+          cameraDirection: 'front',
+          cameraConfig: {
+            direction: XR8.XrConfig.camera().FRONT
+          }
+        })
+      }
+      XR8.stop()
+      isFaceMode = true
+    }
+    uiManager.showInstruction('Point the camera at your face!')
     uiManager.showShutterButton('Point the camera at your face and tap the shutter!')
   }
 
@@ -141,6 +125,15 @@ const onxrloaded = async () => {
   if (maskCard) maskCard.addEventListener('click', startMaskMode)
   if (backBtn) backBtn.addEventListener('click', () => {
     showMenu()
+  })
+
+  // Start XR8 (mascot mode by default, menu shown on top)
+  XR8.run({
+    canvas: document.getElementById('camerafeed'),
+    cameraDirection: 'back',
+    cameraConfig: {
+      direction: XR8.XrConfig.camera().BACK
+    }
   })
 }
 
