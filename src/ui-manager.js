@@ -91,27 +91,16 @@ export class UIManager {
       setTimeout(() => { this.flashEl.style.opacity = '0' }, 120)
     }
 
-    const video = document.querySelector('video')
+    // The WebGL canvas already has the camera feed + 3D overlay composited
+    // by 8th Wall's GlTextureRenderer, so just capture it directly
     const gl = document.getElementById('camerafeed')
-    if (!video || !gl) return
+    if (!gl) return
 
-    // Use CSS pixel dimensions (what the user actually sees on screen)
-    // to keep video and WebGL layers aligned without stretching
-    const c = document.createElement('canvas')
-    const ctx = c.getContext('2d')
-    const dpr = window.devicePixelRatio || 1
-    const w = Math.round(window.innerWidth * dpr)
-    const h = Math.round(window.innerHeight * dpr)
-    c.width = w
-    c.height = h
-
-    ctx.drawImage(video, 0, 0, w, h)
-    ctx.drawImage(gl, 0, 0, w, h)
-
-    this.showPreview(c.toDataURL('image/jpeg'), c)
+    const dataUrl = gl.toDataURL('image/jpeg', 0.92)
+    this.showPreview(dataUrl, gl)
   }
 
-  showPreview(dataUrl, canvas) {
+  showPreview(dataUrl) {
     if (!this.previewModal) return
     this.previewImg.src = dataUrl
     this.shutterContainer.style.display = 'none'
@@ -121,12 +110,13 @@ export class UIManager {
     this.shareBtn.parentNode.replaceChild(newShare, this.shareBtn)
     this.shareBtn = newShare
     this.shareBtn.addEventListener('click', () => {
-      canvas.toBlob((blob) => {
+      // Convert dataUrl to blob for sharing
+      fetch(dataUrl).then(r => r.blob()).then(blob => {
         const file = new File([blob], 'mascot_photo.jpg', {type: 'image/jpeg'})
         if (navigator.share && navigator.canShare({files: [file]})) {
           navigator.share({files: [file], title: 'Mascot Photo!'}).catch(() => {})
         }
-      }, 'image/jpeg')
+      })
     })
 
     const newDl = this.downloadBtn.cloneNode(true)
