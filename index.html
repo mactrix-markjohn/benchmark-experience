@@ -46,6 +46,19 @@
       user-select: none;
     }
 
+    /* Front-camera selfie video (behind the WebGL canvas) */
+    #selfie-video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      display: none;
+      transform: scaleX(-1);
+    }
+
     /* Fullscreen AR camera canvas */
     #camerafeed {
       position: absolute;
@@ -496,7 +509,7 @@
       100% { text-shadow: 0 0 2px var(--color-secondary-glow); }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-CBpU4rNU.js"></script>
+  <script type="module" crossorigin src="./assets/index-Bd2Owiwr.js"></script>
 </head>
 <body>
   <!-- On-screen console debugger for mobile unhandled exceptions -->
@@ -554,6 +567,9 @@
       }
     }, true);
   </script>
+
+  <!-- Front-camera selfie video (behind the WebGL canvas) -->
+  <video id="selfie-video" playsinline autoplay muted></video>
 
   <!-- The main canvas used for WebGL drawing by the app -->
   <canvas id="camerafeed"></canvas>
