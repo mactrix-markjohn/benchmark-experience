@@ -27,31 +27,69 @@
 
     body, html {
       width: 100%; height: 100%; overflow: hidden;
-      font-family: var(--font); background: #000; color: #fff;
+      font-family: var(--font); background: #05050a; color: #fff;
       -webkit-user-select: none; user-select: none;
     }
 
-    /* --- Layers --- */
+    /* --- Canvas --- */
     #camerafeed {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       z-index: 1; display: block;
     }
 
-    /* --- Minimal HUD --- */
-    /* --- Mode toggle --- */
-    #mode-toggle {
+    /* --- Menu Screen --- */
+    #menu-screen {
+      position: absolute; inset: 0; z-index: 200;
+      background: radial-gradient(circle at center, #150f2d, #05050a);
+      display: none; flex-direction: column;
+      justify-content: center; align-items: center;
+      padding: 32px; text-align: center;
+    }
+    .menu-logo {
+      font-size: 2.2rem; font-weight: 800;
+      background: linear-gradient(45deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .menu-sub {
+      font-size: 0.8rem; color: #666; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600; margin-bottom: 36px;
+    }
+    .menu-cards {
+      display: flex; flex-direction: column; gap: 16px;
+      width: 100%; max-width: 320px;
+    }
+    .menu-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 24px;
+      cursor: pointer; transition: all 0.2s ease;
+      text-align: left;
+    }
+    .menu-card:active { transform: scale(0.97); }
+    .menu-card-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .menu-card-title { font-size: 1rem; font-weight: 800; margin-bottom: 6px; }
+    .menu-card-desc { font-size: 0.8rem; color: #888; line-height: 1.4; }
+    .menu-card.mascot { border-color: rgba(0,242,254,0.2); }
+    .menu-card.mascot:active { border-color: var(--cyan); }
+    .menu-card.mask { border-color: rgba(138,43,226,0.2); }
+    .menu-card.mask:active { border-color: var(--purple); }
+
+    /* --- Back button --- */
+    #back-btn {
       position: absolute; top: 16px; left: 16px;
       background: var(--glass); backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       padding: 8px 16px; border-radius: 20px;
       font-family: var(--font); font-size: 0.75rem; font-weight: 700;
       border: 1px solid rgba(255,255,255,0.15);
-      color: var(--cyan); z-index: 999; cursor: pointer;
-      letter-spacing: 0.5px;
+      color: #fff; z-index: 999; cursor: pointer;
+      display: none;
     }
-    #mode-toggle:active { transform: scale(0.95); }
+    #back-btn:active { transform: scale(0.95); }
 
+    /* --- HUD --- */
     #score-pill {
       position: absolute; top: 16px; right: 16px;
       background: var(--glass); backdrop-filter: blur(10px);
@@ -75,38 +113,7 @@
       color: rgba(255,255,255,0.9);
     }
 
-    /* --- Onboarding --- */
-    #onboarding-screen {
-      position: absolute; inset: 0; z-index: 100;
-      background: radial-gradient(circle at center, #150f2d, #05050a);
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center;
-      padding: 40px; text-align: center;
-      transition: opacity 0.3s ease;
-    }
-    .ob-logo {
-      font-size: 2.2rem; font-weight: 800;
-      background: linear-gradient(45deg, var(--cyan), var(--purple));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      margin-bottom: 24px;
-    }
-    .ob-card {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 20px; padding: 28px; max-width: 340px;
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    }
-    .ob-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 8px; }
-    .ob-desc { font-size: 0.85rem; line-height: 1.5; color: #a0a0b0; margin-bottom: 24px; }
-    .btn-primary {
-      width: 100%; border: none; color: #fff;
-      font-family: var(--font); font-size: 0.9rem; font-weight: 700;
-      padding: 14px; border-radius: 28px; cursor: pointer;
-      background: linear-gradient(45deg, var(--purple), var(--cyan));
-      box-shadow: 0 4px 15px rgba(138,43,226,0.35);
-    }
-
-    /* --- Found overlay (compact toast) --- */
+    /* --- Found overlay --- */
     #found-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
@@ -126,19 +133,23 @@
       text-transform: uppercase; color: var(--cyan); margin-bottom: 8px;
     }
     .found-title { font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; }
-    .found-pts {
-      font-size: 1.6rem; font-weight: 800; color: var(--cyan);
-      margin-bottom: 6px;
-    }
+    .found-pts { font-size: 1.6rem; font-weight: 800; color: var(--cyan); margin-bottom: 6px; }
     .found-pts-label {
       font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px;
       color: rgba(255,255,255,0.5); margin-bottom: 20px;
+    }
+    .btn-primary {
+      width: 100%; border: none; color: #fff;
+      font-family: var(--font); font-size: 0.9rem; font-weight: 700;
+      padding: 14px; border-radius: 28px; cursor: pointer;
+      background: linear-gradient(45deg, var(--purple), var(--cyan));
+      box-shadow: 0 4px 15px rgba(138,43,226,0.35);
     }
 
     /* --- Shutter --- */
     #shutter-container {
       position: absolute; bottom: 32px; left: 0; width: 100%;
-      display: none; justify-content: center; z-index: 5;
+      display: none; justify-content: center; z-index: 999;
     }
     #shutter-btn {
       width: 64px; height: 64px; border-radius: 50%;
@@ -160,7 +171,7 @@
       position: absolute; inset: 0;
       background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
-      z-index: 10; display: flex; align-items: center; justify-content: center;
+      z-index: 1000; display: flex; align-items: center; justify-content: center;
       padding: 24px;
       opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
     }
@@ -192,28 +203,36 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-DmT-_gEP.js"></script>
+  <script type="module" crossorigin src="./assets/index-Bj_IO0nw.js"></script>
 </head>
 <body>
 
   <canvas id="camerafeed"></canvas>
 
-  <!-- Mode toggle + HUD -->
-  <button id="mode-toggle">Try Mask</button>
-  <div id="score-pill"></div>
-  <div id="instruction">Scan the Mascot Decal to begin</div>
-
-  <!-- Onboarding -->
-  <div id="onboarding-screen">
-    <div class="ob-logo">BENCHMARK</div>
-    <div class="ob-card">
-      <div class="ob-title">Find the Mascot</div>
-      <div class="ob-desc">
-        Scan the Mascot Decal to spawn a life-sized mascot. Place it on the floor, then take a selfie!
+  <!-- Menu Screen (shown before camera starts) -->
+  <div id="menu-screen">
+    <div class="menu-logo">BENCHMARK</div>
+    <div class="menu-sub">Choose your experience</div>
+    <div class="menu-cards">
+      <div class="menu-card mascot" onclick="window.location.href=window.location.pathname+'?mode=mascot'">
+        <div class="menu-card-icon">&#x1f680;</div>
+        <div class="menu-card-title">Find the Mascot</div>
+        <div class="menu-card-desc">Scan a target, place the mascot on the floor, and snap a photo!</div>
       </div>
-      <button class="btn-primary" id="onboarding-btn">START</button>
+      <div class="menu-card mask" onclick="window.location.href=window.location.pathname+'?mode=mask'">
+        <div class="menu-card-icon">&#x1f3ad;</div>
+        <div class="menu-card-title">Try the Mask</div>
+        <div class="menu-card-desc">Use the front camera to wear the mascot mask on your face!</div>
+      </div>
     </div>
   </div>
+
+  <!-- Back button (visible during experience) -->
+  <button id="back-btn">Back</button>
+
+  <!-- HUD -->
+  <div id="score-pill"></div>
+  <div id="instruction"></div>
 
   <!-- Found overlay -->
   <div id="found-overlay">
@@ -236,7 +255,7 @@
   <div id="preview-modal">
     <div class="preview-card">
       <div class="preview-frame">
-        <img id="preview-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Selfie">
+        <img id="preview-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Photo">
       </div>
       <div class="preview-actions">
         <button class="btn-primary" id="share-btn">Share</button>
