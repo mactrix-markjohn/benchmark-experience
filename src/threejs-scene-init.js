@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 
 const PHYSICAL_METERS_PER_UNIT = 0.21
 const UNITS_PER_METER = 1.0 / PHYSICAL_METERS_PER_UNIT
@@ -9,7 +9,7 @@ const STATE = {SCANNING: 0, PLACING: 1, PLACED: 2, SELFIE: 3}
 export const initScenePipelineModule = (gameState, uiManager) => {
   let currentState = STATE.SCANNING
   let mascotModel = null
-  let placeholderRing = null
+  let reticle = null
   let groundPlane = null
   let rawMinY = 0
   let scaleFactor = 1.0
@@ -20,7 +20,9 @@ export const initScenePipelineModule = (gameState, uiManager) => {
 
   let xrScene = null
   let xrCamera = null
-  let selfieAnimFrame = null
+
+  // Flag: target was detected before model finished loading
+  let pendingActivation = false
 
   const initXrScene = ({scene, camera, renderer}) => {
     renderer.preserveDrawingBuffer = true
@@ -28,177 +30,155 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     xrCamera = camera
     renderer.shadowMap.enabled = true
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5)
-    directionalLight.position.set(5, 12, 8)
-    directionalLight.castShadow = true
-    directionalLight.shadow.mapSize.width = 1024
-    directionalLight.shadow.mapSize.height = 1024
-    directionalLight.shadow.camera.near = 0.5
-    directionalLight.shadow.camera.far = 25
-    scene.add(directionalLight)
-
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5)
+    dirLight.position.set(5, 12, 8)
+    dirLight.castShadow = true
+    dirLight.shadow.mapSize.set(1024, 1024)
+    dirLight.shadow.camera.near = 0.5
+    dirLight.shadow.camera.far = 25
+    scene.add(dirLight)
     scene.add(new THREE.AmbientLight(0xffffff, 0.6))
 
-    // Ground reticle ring for placement mode
-    const ringGeo = new THREE.RingGeometry(0.4, 0.5, 48)
+    // Ground reticle for placement
+    const ringGeo = new THREE.RingGeometry(0.6, 0.75, 48)
     ringGeo.rotateX(-Math.PI / 2)
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x00f2fe,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8
-    })
-    placeholderRing = new THREE.Mesh(ringGeo, ringMat)
-    placeholderRing.visible = false
-    scene.add(placeholderRing)
+    reticle = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+      color: 0x00f2fe, side: THREE.DoubleSide, transparent: true, opacity: 0.7
+    }))
+    reticle.visible = false
+    scene.add(reticle)
 
-    // Invisible ground plane for raycasting tap-to-place
+    // Invisible ground for raycasting
     const groundGeo = new THREE.PlaneGeometry(500, 500)
     groundGeo.rotateX(-Math.PI / 2)
-    const groundMat = new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide})
-    groundPlane = new THREE.Mesh(groundGeo, groundMat)
-    groundPlane.position.y = 0
+    groundPlane = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}))
     scene.add(groundPlane)
 
-    // Load mascot model
-    const loader = new GLTFLoader()
-    loader.load(
-      'assets/AstronautThumbUp.glb',
-      (gltf) => {
-        mascotModel = gltf.scene
+    // Load mascot
+    new GLTFLoader().load('assets/AstronautThumbUp.glb', (gltf) => {
+      mascotModel = gltf.scene
+      mascotModel.updateMatrixWorld(true)
+      const box = new THREE.Box3().setFromObject(mascotModel)
+      const size = box.getSize(new THREE.Vector3())
+      rawMinY = box.min.y
 
-        mascotModel.updateMatrixWorld(true)
-        const box = new THREE.Box3().setFromObject(mascotModel)
-        const size = box.getSize(new THREE.Vector3())
-        rawMinY = box.min.y
-        console.log('[AR] Mascot loaded, bounds:', size, 'rawMinY:', rawMinY)
+      const rawHeight = size.y
+      const targetHeight = 2.6 * UNITS_PER_METER
+      scaleFactor = rawHeight > 0 ? targetHeight / rawHeight : 6.0
+      mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
+      mascotModel.visible = false
 
-        const rawHeight = size.y
-        if (rawHeight > 0) {
-          const targetHeight = 2.6 * UNITS_PER_METER
-          scaleFactor = targetHeight / rawHeight
-        } else {
-          scaleFactor = 6.0
-        }
-        mascotModel.scale.set(scaleFactor, scaleFactor, scaleFactor)
-        mascotModel.visible = false
+      mascotModel.traverse((n) => {
+        if (n.isMesh) { n.castShadow = true; n.receiveShadow = true }
+      })
+      scene.add(mascotModel)
 
-        mascotModel.traverse((node) => {
-          if (node.isMesh) {
-            node.castShadow = true
-            node.receiveShadow = true
-          }
-        })
+      if (gltf.animations && gltf.animations.length > 0) {
+        const mixer = new THREE.AnimationMixer(mascotModel)
+        mixer.clipAction(gltf.animations[0]).play()
+        mixers.push(mixer)
+      }
 
-        scene.add(mascotModel)
+      console.log('[AR] Mascot loaded, height:', size.y, 'scale:', scaleFactor)
 
-        if (gltf.animations && gltf.animations.length > 0) {
-          const mixer = new THREE.AnimationMixer(mascotModel)
-          mixer.clipAction(gltf.animations[0]).play()
-          mixers.push(mixer)
-        }
-      },
-      undefined,
-      (err) => console.error('Error loading mascot:', err)
-    )
+      // If the target was found while model was still loading, activate now
+      if (pendingActivation) {
+        pendingActivation = false
+        activateExperience()
+      }
+    }, undefined, (err) => console.error('Model load error:', err))
 
     camera.position.set(0, 2, 3)
   }
 
-  // Calibrate ground plane height from the first few frames of camera data
+  // Calibrate ground plane from camera height (once)
   let groundCalibrated = false
   const calibrateGround = () => {
     if (groundCalibrated || !xrCamera || !groundPlane) return
-    const cameraPos = new THREE.Vector3()
-    xrCamera.getWorldPosition(cameraPos)
-    // 8th Wall SLAM starts with camera at ~eye level.
-    // Estimate floor as 1.3m below current camera position.
-    const estimatedFloor = cameraPos.y - (1.3 * UNITS_PER_METER)
-    groundPlane.position.y = estimatedFloor
+    const cp = new THREE.Vector3()
+    xrCamera.getWorldPosition(cp)
+    groundPlane.position.y = cp.y - (1.3 * UNITS_PER_METER)
     groundCalibrated = true
-    console.log('[AR] Ground calibrated at Y:', estimatedFloor, 'camera Y:', cameraPos.y)
   }
 
-  // Place mascot at a world position on the floor
-  const placeMascotAt = (floorPoint) => {
+  // Show the found modal and transition to placement mode
+  const activateExperience = () => {
+    // Reset stale localStorage so returning users can re-play
+    gameState.resetGame()
+
+    const reward = gameState.scanTarget('image-target-atomic')
+    if (!reward) return
+
+    uiManager.showFoundOverlay(reward.points, () => {
+      currentState = STATE.PLACING
+      uiManager.showInstruction('Tap the floor to place the mascot')
+    })
+  }
+
+  const placeMascotAt = (point) => {
     if (!mascotModel || !xrCamera) return
-
-    mascotModel.position.copy(floorPoint)
+    mascotModel.position.copy(point)
     mascotModel.position.y -= rawMinY * scaleFactor
-
-    // Face the camera
-    const cameraPos = new THREE.Vector3()
-    xrCamera.getWorldPosition(cameraPos)
-    mascotModel.lookAt(new THREE.Vector3(cameraPos.x, mascotModel.position.y, cameraPos.z))
-
+    const cp = new THREE.Vector3()
+    xrCamera.getWorldPosition(cp)
+    mascotModel.lookAt(new THREE.Vector3(cp.x, mascotModel.position.y, cp.z))
     mascotModel.visible = true
-    if (placeholderRing) placeholderRing.visible = false
-
+    reticle.visible = false
     currentState = STATE.PLACED
+    uiManager.showInstruction('')
     uiManager.showSelfieButton()
-    uiManager.updateClue('The mascot is placed! Tap "Take Selfie" to snap a photo with it.')
   }
 
-  // Handle tap during placement mode
   const handlePlacementTap = (e) => {
-    if (currentState !== STATE.PLACING || !mascotModel || !xrCamera || !groundPlane) return
-
-    const touch = e.touches ? e.touches[0] : e
-    const tapNDC = new THREE.Vector2(
-      (touch.clientX / window.innerWidth) * 2 - 1,
-      -(touch.clientY / window.innerHeight) * 2 + 1
+    if (currentState !== STATE.PLACING || !xrCamera || !groundPlane) return
+    const t = e.touches ? e.touches[0] : e
+    const ndc = new THREE.Vector2(
+      (t.clientX / window.innerWidth) * 2 - 1,
+      -(t.clientY / window.innerHeight) * 2 + 1
     )
-
-    raycaster.setFromCamera(tapNDC, xrCamera)
+    raycaster.setFromCamera(ndc, xrCamera)
     const hits = raycaster.intersectObject(groundPlane)
-    if (hits.length > 0) {
-      placeMascotAt(hits[0].point)
-    }
+    if (hits.length > 0) placeMascotAt(hits[0].point)
   }
 
-  // Transition to front-camera selfie mode
   const startSelfieMode = () => {
     currentState = STATE.SELFIE
-
     const {scene, camera, renderer} = XR8.Threejs.xrScene()
-
     XR8.pause()
-
     renderer.setClearColor(0x000000, 0)
 
+    scene.add(new THREE.DirectionalLight(0xffffff, 1.0).position.set(0, 5, 10) && scene.children[scene.children.length - 1] || new THREE.Object3D())
     const selfieLight = new THREE.DirectionalLight(0xffffff, 1.0)
     selfieLight.position.set(0, 5, 10)
     scene.add(selfieLight)
 
-    const mascotH = 2.6 * UNITS_PER_METER
+    const h = 2.6 * UNITS_PER_METER
     camera.fov = 50
     camera.aspect = window.innerWidth / window.innerHeight
     camera.near = 0.1
     camera.far = 1000
     camera.updateProjectionMatrix()
-    camera.position.set(0, mascotH * 0.45, mascotH * 1.4)
-    camera.lookAt(mascotH * 0.12, mascotH * 0.35, 0)
+    camera.position.set(0, h * 0.45, h * 1.4)
+    camera.lookAt(h * 0.12, h * 0.35, 0)
 
     if (mascotModel) {
-      mascotModel.position.set(mascotH * 0.25, 0, 0)
+      mascotModel.position.set(h * 0.25, 0, 0)
       mascotModel.rotation.set(0, -Math.PI / 6, 0)
       mascotModel.visible = true
     }
+    if (reticle) reticle.visible = false
 
-    if (placeholderRing) placeholderRing.visible = false
-
-    const renderSelfieFrame = () => {
+    const renderLoop = () => {
       if (currentState !== STATE.SELFIE) return
       const delta = clock.getDelta()
       mixers.forEach((m) => m.update(delta))
       renderer.clear()
       renderer.render(scene, camera)
-      selfieAnimFrame = requestAnimationFrame(renderSelfieFrame)
+      requestAnimationFrame(renderLoop)
     }
-    renderSelfieFrame()
+    renderLoop()
   }
 
-  // Expose selfie trigger for the UI manager
   uiManager._startSelfieMode = startSelfieMode
 
   return {
@@ -207,35 +187,28 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     onStart: ({canvas}) => {
       const {scene, camera, renderer} = XR8.Threejs.xrScene()
       initXrScene({scene, camera, renderer})
-
       XR8.XrController.updateCameraProjectionMatrix({
-        origin: camera.position,
-        facing: camera.quaternion
+        origin: camera.position, facing: camera.quaternion
       })
-
-      // Listen for taps on the canvas for mascot placement
       canvas.addEventListener('touchstart', handlePlacementTap)
     },
 
     onUpdate: () => {
       const delta = clock.getDelta()
       mixers.forEach((m) => m.update(delta))
-
-      // Calibrate ground plane once SLAM has started
       calibrateGround()
 
-      // During placement mode, project reticle onto ground from screen center
-      if (currentState === STATE.PLACING && placeholderRing && xrCamera && groundPlane) {
+      if (currentState === STATE.PLACING && reticle && xrCamera && groundPlane) {
         raycaster.setFromCamera(screenCenter, xrCamera)
         const hits = raycaster.intersectObject(groundPlane)
         if (hits.length > 0) {
-          placeholderRing.position.copy(hits[0].point)
-          placeholderRing.position.y += 0.02
-          placeholderRing.visible = true
+          reticle.position.copy(hits[0].point)
+          reticle.position.y += 0.02
+          reticle.visible = true
         } else {
-          placeholderRing.visible = false
+          reticle.visible = false
         }
-        placeholderRing.rotation.y += 0.01
+        reticle.rotation.y += 0.01
       }
     },
 
@@ -246,39 +219,19 @@ export const initScenePipelineModule = (gameState, uiManager) => {
           if (currentState !== STATE.SCANNING) return
           const {name} = event.detail || event
           if (name !== 'image-target-atomic') return
-          if (!mascotModel) return
 
-          // Award points once
-          const reward = gameState.scanTarget(name)
-          if (reward) {
-            uiManager.updateHUD(
-              reward.totalScore,
-              reward.progress,
-              gameState.totalTargets,
-              reward.nextClue
-            )
-
-            uiManager.showFoundModal(
-              reward.title,
-              reward.description,
-              reward.points,
-              () => {
-                // Enter placement mode after dismissing the modal
-                currentState = STATE.PLACING
-                uiManager.updateClue('Point your camera at the floor and tap to place the mascot.')
-              }
-            )
+          if (!mascotModel) {
+            // Model still loading — show a loading hint and defer activation
+            pendingActivation = true
+            uiManager.showInstruction('Loading mascot...')
+            return
           }
+
+          activateExperience()
         }
       },
-      {
-        event: 'reality.imageupdated',
-        process: () => {}
-      },
-      {
-        event: 'reality.imagelost',
-        process: () => {}
-      }
+      {event: 'reality.imageupdated', process: () => {}},
+      {event: 'reality.imagelost', process: () => {}}
     ]
   }
 }
