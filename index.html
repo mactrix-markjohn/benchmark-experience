@@ -32,11 +32,6 @@
     }
 
     /* --- Layers --- */
-    #selfie-video {
-      position: absolute; inset: 0;
-      width: 100%; height: 100%; object-fit: cover;
-      z-index: 0; display: none; transform: scaleX(-1);
-    }
     #camerafeed {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
@@ -127,17 +122,6 @@
       color: rgba(255,255,255,0.5); margin-bottom: 20px;
     }
 
-    /* --- Selfie button --- */
-    #selfie-btn {
-      position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
-      z-index: 5; display: none;
-      border: none; color: #fff;
-      font-family: var(--font); font-size: 0.85rem; font-weight: 700;
-      padding: 12px 28px; border-radius: 28px; cursor: pointer;
-      background: linear-gradient(45deg, var(--purple), var(--cyan));
-      box-shadow: 0 4px 20px rgba(0,242,254,0.3);
-    }
-
     /* --- Shutter --- */
     #shutter-container {
       position: absolute; bottom: 32px; left: 0; width: 100%;
@@ -198,7 +182,6 @@
 </head>
 <body>
 
-  <video id="selfie-video" playsinline autoplay muted></video>
   <canvas id="camerafeed"></canvas>
 
   <!-- Minimal HUD -->
@@ -227,9 +210,6 @@
       <button class="btn-primary" id="found-btn">Place Mascot</button>
     </div>
   </div>
-
-  <!-- Selfie button -->
-  <button id="selfie-btn">Take Selfie</button>
 
   <!-- Shutter -->
   <div id="shutter-container"><button id="shutter-btn"></button></div>

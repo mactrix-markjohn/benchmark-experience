@@ -1,10 +1,6 @@
 export class UIManager {
   constructor(gameState) {
     this.gameState = gameState
-    this.selfieStream = null
-    this.selfieVideoEl = null
-    this.inSelfieMode = false
-    this._startSelfieMode = null
 
     this.instruction = document.getElementById('instruction')
     this.scorePill = document.getElementById('score-pill')
@@ -16,7 +12,6 @@ export class UIManager {
     this.foundPoints = document.getElementById('found-points')
     this.foundBtn = document.getElementById('found-btn')
 
-    this.selfieBtnEl = document.getElementById('selfie-btn')
     this.shutterBtn = document.getElementById('shutter-btn')
     this.shutterContainer = document.getElementById('shutter-container')
     this.flashEl = document.getElementById('flash-container')
@@ -44,26 +39,14 @@ export class UIManager {
       this.shutterBtn.addEventListener('click', () => this.triggerCapture())
     }
 
-    if (this.selfieBtnEl) {
-      this.selfieBtnEl.addEventListener('click', () => {
-        this.selfieBtnEl.style.display = 'none'
-        if (this._startSelfieMode) this._startSelfieMode()
-        this.enterSelfieMode()
-      })
-    }
-
     if (this.closePreviewBtn) {
       this.closePreviewBtn.addEventListener('click', () => {
         this.previewModal.classList.remove('active')
-        if (this.inSelfieMode) {
-          this.shutterContainer.style.display = 'flex'
-          this.showInstruction('Strike a pose and tap the shutter!')
-        }
+        this.shutterContainer.style.display = 'flex'
+        this.showInstruction('Move around the mascot and take another shot!')
       })
     }
   }
-
-  // --- Minimal UI helpers ---
 
   showInstruction(text) {
     if (!this.instruction) return
@@ -82,8 +65,6 @@ export class UIManager {
     }
   }
 
-  // --- Found overlay (compact) ---
-
   showFoundOverlay(points, onContinue) {
     if (!this.foundOverlay) return
     this.updateScore(points)
@@ -99,35 +80,10 @@ export class UIManager {
     this.foundOverlay.classList.add('active')
   }
 
-  // --- Selfie button ---
-
-  showSelfieButton() {
-    if (this.selfieBtnEl) this.selfieBtnEl.style.display = 'block'
+  showShutterButton() {
+    if (this.shutterContainer) this.shutterContainer.style.display = 'flex'
+    this.showInstruction('Stand next to the mascot and tap the shutter!')
   }
-
-  // --- Selfie mode (front camera) ---
-
-  async enterSelfieMode() {
-    this.inSelfieMode = true
-    try {
-      this.selfieStream = await navigator.mediaDevices.getUserMedia({
-        video: {facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080}}
-      })
-      this.selfieVideoEl = document.getElementById('selfie-video')
-      this.selfieVideoEl.srcObject = this.selfieStream
-      await this.selfieVideoEl.play()
-      this.selfieVideoEl.style.display = 'block'
-      document.getElementById('camerafeed').style.background = 'transparent'
-
-      this.shutterContainer.style.display = 'flex'
-      this.showInstruction('Strike a pose and tap the shutter!')
-    } catch (err) {
-      console.error('Front camera failed:', err)
-      this.shutterContainer.style.display = 'flex'
-    }
-  }
-
-  // --- Capture ---
 
   triggerCapture() {
     if (this.flashEl) {
@@ -135,7 +91,7 @@ export class UIManager {
       setTimeout(() => { this.flashEl.style.opacity = '0' }, 120)
     }
 
-    const video = this.inSelfieMode ? this.selfieVideoEl : document.querySelector('video')
+    const video = document.querySelector('video')
     const gl = document.getElementById('camerafeed')
     if (!video || !gl) return
 
@@ -144,35 +100,26 @@ export class UIManager {
     c.width = video.videoWidth || window.innerWidth
     c.height = video.videoHeight || window.innerHeight
 
-    if (this.inSelfieMode) {
-      ctx.save()
-      ctx.translate(c.width, 0)
-      ctx.scale(-1, 1)
-      ctx.drawImage(video, 0, 0, c.width, c.height)
-      ctx.restore()
-    } else {
-      ctx.drawImage(video, 0, 0, c.width, c.height)
-    }
+    ctx.drawImage(video, 0, 0, c.width, c.height)
     ctx.drawImage(gl, 0, 0, c.width, c.height)
 
-    const url = c.toDataURL('image/jpeg')
-    this.showPreview(url, c)
+    this.showPreview(c.toDataURL('image/jpeg'), c)
   }
 
   showPreview(dataUrl, canvas) {
     if (!this.previewModal) return
     this.previewImg.src = dataUrl
     this.shutterContainer.style.display = 'none'
+    this.showInstruction('')
 
     const newShare = this.shareBtn.cloneNode(true)
     this.shareBtn.parentNode.replaceChild(newShare, this.shareBtn)
     this.shareBtn = newShare
     this.shareBtn.addEventListener('click', () => {
       canvas.toBlob((blob) => {
-        const file = new File([blob], 'mascot_selfie.jpg', {type: 'image/jpeg'})
+        const file = new File([blob], 'mascot_photo.jpg', {type: 'image/jpeg'})
         if (navigator.share && navigator.canShare({files: [file]})) {
-          navigator.share({files: [file], title: 'Mascot Selfie!'})
-            .catch(() => {})
+          navigator.share({files: [file], title: 'Mascot Photo!'}).catch(() => {})
         }
       }, 'image/jpeg')
     })
@@ -183,14 +130,14 @@ export class UIManager {
     this.downloadBtn.addEventListener('click', () => {
       const a = document.createElement('a')
       a.href = dataUrl
-      a.download = 'mascot_selfie.jpg'
+      a.download = 'mascot_photo.jpg'
       a.click()
     })
 
     this.previewModal.classList.add('active')
   }
 
-  // Kept for compatibility but simplified
+  // Compatibility stubs
   updateHUD() {}
   updateClue(text) { this.showInstruction(text) }
 }

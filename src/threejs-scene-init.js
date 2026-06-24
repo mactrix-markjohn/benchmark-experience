@@ -4,7 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 const PHYSICAL_METERS_PER_UNIT = 0.21
 const UNITS_PER_METER = 1.0 / PHYSICAL_METERS_PER_UNIT
 
-const STATE = {SCANNING: 0, PLACING: 1, PLACED: 2, SELFIE: 3}
+const STATE = {SCANNING: 0, PLACING: 1, PLACED: 2}
 
 export const initScenePipelineModule = (gameState, uiManager) => {
   let currentState = STATE.SCANNING
@@ -20,8 +20,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
 
   let xrScene = null
   let xrCamera = null
-
-  // Flag: target was detected before model finished loading
   let pendingActivation = false
 
   const initXrScene = ({scene, camera, renderer}) => {
@@ -81,7 +79,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
 
       console.log('[AR] Mascot loaded, height:', size.y, 'scale:', scaleFactor)
 
-      // If the target was found while model was still loading, activate now
       if (pendingActivation) {
         pendingActivation = false
         activateExperience()
@@ -91,7 +88,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     camera.position.set(0, 2, 3)
   }
 
-  // Calibrate ground plane from camera height (once)
   let groundCalibrated = false
   const calibrateGround = () => {
     if (groundCalibrated || !xrCamera || !groundPlane) return
@@ -101,11 +97,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     groundCalibrated = true
   }
 
-  // Show the found modal and transition to placement mode
   const activateExperience = () => {
-    // Reset stale localStorage so returning users can re-play
     gameState.resetGame()
-
     const reward = gameState.scanTarget('image-target-atomic')
     if (!reward) return
 
@@ -119,14 +112,17 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     if (!mascotModel || !xrCamera) return
     mascotModel.position.copy(point)
     mascotModel.position.y -= rawMinY * scaleFactor
+
     const cp = new THREE.Vector3()
     xrCamera.getWorldPosition(cp)
     mascotModel.lookAt(new THREE.Vector3(cp.x, mascotModel.position.y, cp.z))
+
     mascotModel.visible = true
     reticle.visible = false
     currentState = STATE.PLACED
+
     uiManager.showInstruction('')
-    uiManager.showSelfieButton()
+    uiManager.showShutterButton()
   }
 
   const handlePlacementTap = (e) => {
@@ -140,46 +136,6 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     const hits = raycaster.intersectObject(groundPlane)
     if (hits.length > 0) placeMascotAt(hits[0].point)
   }
-
-  const startSelfieMode = () => {
-    currentState = STATE.SELFIE
-    const {scene, camera, renderer} = XR8.Threejs.xrScene()
-    XR8.pause()
-    renderer.setClearColor(0x000000, 0)
-
-    scene.add(new THREE.DirectionalLight(0xffffff, 1.0).position.set(0, 5, 10) && scene.children[scene.children.length - 1] || new THREE.Object3D())
-    const selfieLight = new THREE.DirectionalLight(0xffffff, 1.0)
-    selfieLight.position.set(0, 5, 10)
-    scene.add(selfieLight)
-
-    const h = 2.6 * UNITS_PER_METER
-    camera.fov = 50
-    camera.aspect = window.innerWidth / window.innerHeight
-    camera.near = 0.1
-    camera.far = 1000
-    camera.updateProjectionMatrix()
-    camera.position.set(0, h * 0.45, h * 1.4)
-    camera.lookAt(h * 0.12, h * 0.35, 0)
-
-    if (mascotModel) {
-      mascotModel.position.set(h * 0.25, 0, 0)
-      mascotModel.rotation.set(0, -Math.PI / 6, 0)
-      mascotModel.visible = true
-    }
-    if (reticle) reticle.visible = false
-
-    const renderLoop = () => {
-      if (currentState !== STATE.SELFIE) return
-      const delta = clock.getDelta()
-      mixers.forEach((m) => m.update(delta))
-      renderer.clear()
-      renderer.render(scene, camera)
-      requestAnimationFrame(renderLoop)
-    }
-    renderLoop()
-  }
-
-  uiManager._startSelfieMode = startSelfieMode
 
   return {
     name: 'scavenger-hunt-3d-renderer',
@@ -221,12 +177,10 @@ export const initScenePipelineModule = (gameState, uiManager) => {
           if (name !== 'image-target-atomic') return
 
           if (!mascotModel) {
-            // Model still loading — show a loading hint and defer activation
             pendingActivation = true
             uiManager.showInstruction('Loading mascot...')
             return
           }
-
           activateExperience()
         }
       },
