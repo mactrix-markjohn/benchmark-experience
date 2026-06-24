@@ -22,10 +22,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
   let xrCamera = null
   let pendingActivation = false
 
-  // Drift correction: store offset between image target and mascot
+  // Track last known target position (used only during placement phase)
   let lastTargetPos = null
-  let mascotOffsetFromTarget = null
-  let mascotFaceDir = null
 
   const initXrScene = ({scene, camera, renderer}) => {
     renderer.preserveDrawingBuffer = true
@@ -117,29 +115,12 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     xrCamera.getWorldPosition(cp)
     mascotModel.lookAt(new THREE.Vector3(cp.x, mascotModel.position.y, cp.z))
 
-    // Store the facing direction so we can restore it during drift correction
-    mascotFaceDir = new THREE.Vector3(cp.x, mascotModel.position.y, cp.z)
-
-    // Store offset from last known target position for drift correction
-    if (lastTargetPos) {
-      mascotOffsetFromTarget = new THREE.Vector3().subVectors(
-        mascotModel.position, lastTargetPos
-      )
-    }
-
     mascotModel.visible = true
     reticle.visible = false
     currentState = STATE.PLACED
 
     uiManager.showInstruction('')
     uiManager.showShutterButton()
-  }
-
-  // Correct mascot position using the image target as anchor
-  const correctDrift = (targetPos) => {
-    if (!mascotModel || !mascotOffsetFromTarget) return
-    const corrected = new THREE.Vector3().copy(targetPos).add(mascotOffsetFromTarget)
-    mascotModel.position.copy(corrected)
   }
 
   const handlePlacementTap = (e) => {
@@ -189,11 +170,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       {
         event: 'reality.imagefound',
         process: (event) => {
-          const detail = event.detail || event
-          const {name, position} = detail
+          const {name} = event.detail || event
           if (name !== 'image-target-atomic') return
-
-          lastTargetPos = new THREE.Vector3().copy(position)
 
           if (currentState === STATE.SCANNING) {
             if (!mascotModel) {
@@ -203,35 +181,22 @@ export const initScenePipelineModule = (gameState, uiManager) => {
             }
             activateExperience()
           }
-
-          if (currentState === STATE.PLACED) correctDrift(lastTargetPos)
         }
       },
       {
         event: 'reality.imageupdated',
         process: (event) => {
-          const detail = event.detail || event
-          const {name, position} = detail
+          const {name} = event.detail || event
           if (name !== 'image-target-atomic') return
 
-          lastTargetPos = new THREE.Vector3().copy(position)
-
-          // If still waiting for model to load, try again now
+          // If model finished loading while target is still visible
           if (currentState === STATE.SCANNING && pendingActivation && mascotModel) {
             pendingActivation = false
             activateExperience()
-            return
           }
-
-          if (currentState === STATE.PLACED) correctDrift(lastTargetPos)
         }
       },
-      {
-        event: 'reality.imagelost',
-        process: () => {
-          // Mascot stays at last corrected position when target leaves view
-        }
-      }
+      {event: 'reality.imagelost', process: () => {}}
     ]
   }
 }
