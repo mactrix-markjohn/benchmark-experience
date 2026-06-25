@@ -36,6 +36,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
   let swipeStart = null
   let readyBall = null
   let readyBallAnchor = null
+  let ballInFlight = false
 
   const timer = new THREE.Clock()
   const raycaster = new THREE.Raycaster()
@@ -147,9 +148,14 @@ export const initBuzzerBeaterModule = (uiManager) => {
   }
 
   const getReadyBallLocalPosition = () => {
-    // Fixed position in camera-local space: centered, low on the screen,
-    // a short distance in front of the camera.
-    return new THREE.Vector3(0, -0.42, -0.62)
+    // Position the ball at the lower-center of the screen, accounting for the
+    // device's actual field of view so it lands consistently across phones.
+    const distance = 0.9
+    const fovRad = THREE.MathUtils.degToRad(xrCamera?.fov || 60)
+    const halfHeight = Math.tan(fovRad * 0.5) * distance
+    // 0 = screen center, 1 = bottom edge. 0.74 puts it low but fully visible.
+    const y = -halfHeight * 0.74
+    return new THREE.Vector3(0, y, -distance)
   }
 
   const updateReadyBallPose = () => {
@@ -189,8 +195,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
     score = 0
     timeLeft = GAME_DURATION
     gameActive = true
+    ballInFlight = false
     if (readyBallAnchor) {
       readyBallAnchor.visible = true
+      if (readyBall) readyBall.visible = true
       updateReadyBallPose()
     }
     updateHUD()
@@ -246,7 +254,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
   // power: 0..1 (swipe strength controls distance)
   // aim: -1..1 (horizontal swipe controls left/right adjustment)
   const shootBall = (power, aim) => {
-    if (!gameActive || !ballTemplate || !xrCamera) return
+    if (!gameActive || !ballTemplate || !xrCamera || ballInFlight) return
 
     const ball = ballTemplate.clone()
     ball.visible = true
@@ -260,6 +268,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
       xrCamera.getWorldPosition(startPos)
     }
     ball.position.copy(startPos)
+
+    // Hide the on-screen ready ball while this shot is in flight
+    ballInFlight = true
+    if (readyBall) readyBall.visible = false
 
     // Camera heading projected onto the horizontal plane (aim by turning phone)
     const camDir = new THREE.Vector3()
@@ -319,9 +331,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
         Math.abs(bp.y - rimWorld.y) < BALL_RADIUS * 3 &&
         ball.velocity.y < 0) {
       ball.scored = true
+      ball.scoredAt = ball.age
       score++
       updateHUD()
-      uiManager.showInstruction('SCORE! +1')
+      uiManager.showInstruction('SCORE! 🏀 +1')
       setTimeout(() => { if (gameActive) uiManager.showInstruction('Swipe up to shoot!') }, 600)
     }
   }
@@ -405,6 +418,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
       ball.velocity.x *= 0.74
       ball.velocity.z *= 0.74
       ball.bounces++
+      if (!ball.landed) {
+        ball.landed = true
+        ball.landedAt = ball.age
+      }
     }
   }
 
@@ -420,12 +437,28 @@ export const initBuzzerBeaterModule = (uiManager) => {
         remaining -= stepDelta
       }
 
-      // Cleanup
-      if (ball.age > 6 || ball.bounces > 7) {
+      // Remove the ball shortly after it scores, lands, or times out
+      const scoredDone = ball.scored && ball.age > ball.scoredAt + 0.6
+      const landedDone = ball.landed && ball.age > ball.landedAt + 0.7
+      if (scoredDone || landedDone || ball.age > 5) {
         xrScene.remove(ball.mesh)
         activeBalls.splice(i, 1)
       }
     }
+
+    // Once no balls are in flight, bring the ready ball back to the screen
+    if (ballInFlight && activeBalls.length === 0) {
+      respawnReadyBall()
+    }
+  }
+
+  const respawnReadyBall = () => {
+    ballInFlight = false
+    if (readyBall) {
+      readyBall.visible = true
+      readyBall.rotation.set(0, 0, 0)
+    }
+    if (readyBallAnchor) updateReadyBallPose()
   }
 
   // Hoop sliding logic removed as per user request
