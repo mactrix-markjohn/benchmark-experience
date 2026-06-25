@@ -10,8 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
   <script src="./external/xr/xr.js?v=7" async data-preload-chunks="face, slam"></script>
-  <script src="./external/xrextras/xrextras.js"></script>
-  <script src="./external/landing-page/landing-page.js"></script>
+  <script src="https://cdn.8thwall.com/web/xrextras/xrextras.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.8thwall.com/web/landing-page/landing-page.js" crossorigin="anonymous"></script>
 
   <style>
     :root {
@@ -36,7 +36,6 @@
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       z-index: 1; display: block;
-      touch-action: none;
     }
 
     /* --- Menu Screen --- */
@@ -97,7 +96,6 @@
       position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
       display: none; gap: 20px; align-items: center;
       z-index: 999;
-      pointer-events: none;
     }
     .buzzer-stat {
       background: var(--glass); backdrop-filter: blur(10px);
@@ -150,7 +148,6 @@
       font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
       border: 1px solid rgba(255,255,255,0.12);
       z-index: 999; display: none;
-      pointer-events: none;
       color: var(--cyan);
     }
 
@@ -162,7 +159,6 @@
       font-size: 0.8rem; font-weight: 600; text-align: center;
       border: 1px solid rgba(255,255,255,0.08);
       z-index: 999; display: none;
-      pointer-events: none;
       max-width: 85%; white-space: nowrap;
       color: rgba(255,255,255,0.9);
     }
@@ -257,27 +253,21 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-BYepZnnk.js"></script>
+  <script type="module" crossorigin src="./assets/index-Bv_dq9r3.js"></script>
 </head>
 <body>
-  <div id="debug-log-panel" style="position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.85); color: #ff3333; font-family: monospace; font-size: 10px; padding: 10px; border-radius: 8px; z-index: 99999; max-height: 200px; overflow-y: auto; word-break: break-all; border: 1px solid red; pointer-events: none; display: none;">
+  <div id="debug-log-panel" style="position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.85); color: #ff3333; font-family: monospace; font-size: 10px; padding: 10px; border-radius: 8px; z-index: 99999; max-height: 200px; overflow-y: auto; word-break: break-all; border: 1px solid red;">
     <strong>Debug Log:</strong><br>
   </div>
   <script>
     (function() {
       const panel = document.getElementById('debug-log-panel');
-      const debugEnabled = new URLSearchParams(window.location.search).get('debug') === 'true';
-      if (debugEnabled) {
-        panel.style.display = 'block';
-      }
       function log(msg) {
-        if (!debugEnabled) return;
         panel.innerHTML += msg + '<br>';
         panel.scrollTop = panel.scrollHeight;
       }
       window.logToScreen = log;
       window.addEventListener('error', function(e) {
-        if (!debugEnabled) return;
         let msg = 'ERR: ' + e.message + ' at ' + e.filename + ':' + e.lineno;
         if (e.error && e.error.stack) {
           msg += '<br>Stack: ' + e.error.stack.replace(/\n/g, '<br>');
@@ -285,7 +275,6 @@
         log(msg);
       }, true);
       window.addEventListener('unhandledrejection', function(e) {
-        if (!debugEnabled) return;
         let msg = 'REJ: ' + e.reason;
         if (e.reason && e.reason.stack) {
           msg += '<br>Stack: ' + e.reason.stack.replace(/\n/g, '<br>');
@@ -295,25 +284,23 @@
       const originalConsoleError = console.error;
       console.error = function() {
         const args = Array.prototype.slice.call(arguments);
-        if (debugEnabled) {
-          let msg = 'CON_ERR: ' + args.join(' ');
-          args.forEach(arg => {
-            if (arg && arg.stack) {
-              msg += '<br>Stack: ' + arg.stack.replace(/\n/g, '<br>');
-            }
-          });
-          log(msg);
-        }
+        let msg = 'CON_ERR: ' + args.join(' ');
+        args.forEach(arg => {
+          if (arg && arg.stack) {
+            msg += '<br>Stack: ' + arg.stack.replace(/\n/g, '<br>');
+          }
+        });
+        log(msg);
         originalConsoleError.apply(console, arguments);
       };
       const originalConsoleWarn = console.warn;
       console.warn = function() {
-        if (debugEnabled) log('CON_WARN: ' + Array.prototype.slice.call(arguments).join(' '));
+        log('CON_WARN: ' + Array.prototype.slice.call(arguments).join(' '));
         originalConsoleWarn.apply(console, arguments);
       };
       const originalConsoleLog = console.log;
       console.log = function() {
-        if (debugEnabled) log('CON_LOG: ' + Array.prototype.slice.call(arguments).join(' '));
+        log('CON_LOG: ' + Array.prototype.slice.call(arguments).join(' '));
         originalConsoleLog.apply(console, arguments);
       };
       log('Debugger initialized. UA: ' + navigator.userAgent);
