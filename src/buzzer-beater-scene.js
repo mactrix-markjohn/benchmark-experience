@@ -36,6 +36,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
   let gameActive = false
   let gameTimer = null
   let swipeStart = null
+  let readyBall = null
 
   const timer = new THREE.Clock()
   const raycaster = new THREE.Raycaster()
@@ -115,16 +116,22 @@ export const initBuzzerBeaterModule = (uiManager) => {
     // Ball - load the user's white basketball model
     loader.load('assets/basketballwhite.glb', (gltf) => {
       ballTemplate = gltf.scene
+      ballTemplate.updateMatrixWorld(true)
       
-      // Calculate scale to match BALL_RADIUS (which is 0.12)
       const box = new THREE.Box3().setFromObject(ballTemplate)
       const size = box.getSize(new THREE.Vector3())
+      const maxDim = Math.max(size.x, size.y, size.z)
       
-      // Assuming size.y is the diameter of the ball model
-      const scale = (BALL_RADIUS * 2) / size.y
-      ballTemplate.scale.set(scale, scale, scale)
+      if (maxDim > 0) {
+        const scale = (BALL_RADIUS * 2) / maxDim
+        ballTemplate.scale.set(scale, scale, scale)
+      }
       
       ballTemplate.visible = false
+
+      readyBall = ballTemplate.clone()
+      readyBall.visible = false
+      scene.add(readyBall)
     })
   }
 
@@ -157,6 +164,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
     score = 0
     timeLeft = GAME_DURATION
     gameActive = true
+    if (readyBall) readyBall.visible = true
     updateHUD()
     showBuzzerHUD(true)
     uiManager.showInstruction('Swipe up to shoot!')
@@ -171,6 +179,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
   const endGame = () => {
     gameActive = false
+    if (readyBall) readyBall.visible = false
     if (gameTimer) { clearInterval(gameTimer); gameTimer = null }
     showBuzzerHUD(false)
     uiManager.showInstruction('')
@@ -213,17 +222,24 @@ export const initBuzzerBeaterModule = (uiManager) => {
     ball.visible = true
     xrScene.add(ball)
 
-    const camPos = new THREE.Vector3()
+    // The ball starts exactly where the readyBall is
+    if (readyBall) {
+      ball.position.copy(readyBall.position)
+      ball.quaternion.copy(readyBall.quaternion)
+    } else {
+      const camPos = new THREE.Vector3()
+      const camDir = new THREE.Vector3()
+      const camUp = new THREE.Vector3(0, 1, 0)
+      xrCamera.getWorldPosition(camPos)
+      xrCamera.getWorldDirection(camDir)
+      ball.position.copy(camPos)
+      ball.position.addScaledVector(camDir, 0.4)
+      ball.position.addScaledVector(camUp, -0.3)
+    }
+
     const camDir = new THREE.Vector3()
-    const camUp = new THREE.Vector3(0, 1, 0)
-    xrCamera.getWorldPosition(camPos)
     xrCamera.getWorldDirection(camDir)
-
-    // Start ball just below and in front of the camera so it's visible during throw
-    ball.position.copy(camPos)
-    ball.position.addScaledVector(camDir, 0.4)
-    ball.position.addScaledVector(camUp, -0.3)
-
+    
     // Launch direction: flatten the camera pitch slightly to throw forward, and add an upward arc
     const launchDir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize()
 
@@ -433,6 +449,22 @@ export const initBuzzerBeaterModule = (uiManager) => {
         reticle.rotation.y += 0.015
       }
 
+      // Update readyBall position to stick to the bottom center of the camera
+      if (gameActive && readyBall && xrCamera) {
+        const camPos = new THREE.Vector3()
+        const camDir = new THREE.Vector3()
+        const camUp = new THREE.Vector3(0, 1, 0)
+        xrCamera.getWorldPosition(camPos)
+        xrCamera.getWorldDirection(camDir)
+        
+        readyBall.position.copy(camPos)
+        readyBall.position.addScaledVector(camDir, 0.5) // 0.5m in front
+        readyBall.position.addScaledVector(camUp, -0.2) // 0.2m below eye level
+        
+        // Spin the ready ball slowly for effect
+        readyBall.rotation.y += delta
+      }
+
       updateHoopSlide(delta)
       updateBalls(delta)
     },
@@ -452,6 +484,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
         if (hoopGroup) xrScene.remove(hoopGroup)
         if (groundPlane) xrScene.remove(groundPlane)
         if (reticle) xrScene.remove(reticle)
+        if (readyBall) xrScene.remove(readyBall)
       }
     }
   }
