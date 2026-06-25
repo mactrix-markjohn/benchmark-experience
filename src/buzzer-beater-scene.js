@@ -112,11 +112,20 @@ export const initBuzzerBeaterModule = (uiManager) => {
       scene.add(hoopGroup)
     })
 
-    // Ball - create a simple orange sphere (more visible than white GLB)
-    const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 24, 24)
-    const ballMat = new THREE.MeshStandardMaterial({color: 0xff6600, roughness: 0.6})
-    ballTemplate = new THREE.Mesh(ballGeo, ballMat)
-    ballTemplate.visible = false
+    // Ball - load the user's white basketball model
+    loader.load('assets/basketballwhite.glb', (gltf) => {
+      ballTemplate = gltf.scene
+      
+      // Calculate scale to match BALL_RADIUS (which is 0.12)
+      const box = new THREE.Box3().setFromObject(ballTemplate)
+      const size = box.getSize(new THREE.Vector3())
+      
+      // Assuming size.y is the diameter of the ball model
+      const scale = (BALL_RADIUS * 2) / size.y
+      ballTemplate.scale.set(scale, scale, scale)
+      
+      ballTemplate.visible = false
+    })
   }
 
   const placeHoop = (point) => {
