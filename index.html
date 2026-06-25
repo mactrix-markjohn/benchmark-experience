@@ -167,6 +167,17 @@
       color: rgba(255,255,255,0.9);
     }
 
+    #buzzer-place-btn {
+      position: absolute;
+      left: 50%;
+      bottom: 112px;
+      transform: translateX(-50%);
+      display: none;
+      z-index: 999;
+      min-width: 180px;
+      pointer-events: auto;
+    }
+
     /* --- Found overlay --- */
     #found-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -257,7 +268,7 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-lHC5Xxbt.js"></script>
+  <script type="module" crossorigin src="./assets/index-BL8Ou5DU.js"></script>
 </head>
 <body>
   <div id="debug-log-panel" style="position: fixed; top: 6px; right: 6px; width: 140px; background: rgba(0,0,0,0.55); color: #ff5555; font-family: monospace; font-size: 7px; line-height: 1.3; padding: 5px; border-radius: 6px; z-index: 99999; max-height: 90px; overflow-y: auto; word-break: break-all; border: 1px solid rgba(255,0,0,0.4); pointer-events: none; display: none; opacity: 0.65;">
@@ -361,6 +372,7 @@
   <!-- HUD -->
   <div id="score-pill"></div>
   <div id="instruction"></div>
+  <button id="buzzer-place-btn" class="btn-primary">Place Net</button>
 
   <!-- Found overlay -->
   <div id="found-overlay">
