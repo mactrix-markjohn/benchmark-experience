@@ -56,7 +56,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
     scene.add(new THREE.AmbientLight(0xffffff, 0.7))
 
     // Reticle
-    const ringGeo = new THREE.RingGeometry(0.5, 0.6, 32)
+    const ringGeo = new THREE.RingGeometry(0.15, 0.2, 32)
     ringGeo.rotateX(-Math.PI / 2)
     reticle = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
       color: 0xff6600, side: THREE.DoubleSide, transparent: true, opacity: 0.8
@@ -88,8 +88,8 @@ export const initBuzzerBeaterModule = (uiManager) => {
       const box = new THREE.Box3().setFromObject(hoopModel)
       const size = box.getSize(new THREE.Vector3())
 
-      // Scale hoop to ~2.5m tall for AR (closer to real life)
-      hoopScaleFactor = 2.5 / size.y
+      // Scale hoop to ~1.5m tall for AR
+      hoopScaleFactor = 1.5 / size.y
       hoopModel.scale.set(hoopScaleFactor, hoopScaleFactor, hoopScaleFactor)
 
       hoopModel.updateMatrixWorld(true)
