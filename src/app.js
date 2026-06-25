@@ -5,6 +5,8 @@ import {UIManager} from './ui-manager.js'
 import {initFaceMaskModule} from './face-mask-scene.js'
 import {initScenePipelineModule} from './threejs-scene-init.js'
 import {initBuzzerBeaterModule} from './buzzer-beater-scene.js'
+import imageTargetAtomic from '../image-targets/image-target-atomic.json'
+import imageTargetBackPower from '../image-targets/image-target-back-power.json'
 
 window.THREE = THREE
 window.THREE.GLTFLoader = GLTFLoader
@@ -59,6 +61,10 @@ const onxrloaded = () => {
   // Configure XrController for scanning session upfront
   XR8.XrController.configure({
     disableWorldTracking: false,
+    imageTargetData: [
+      imageTargetAtomic,
+      imageTargetBackPower,
+    ],
   })
 
   // Start initial scanning pipeline (BACK camera)
@@ -176,6 +182,10 @@ const onxrloaded = () => {
       // Reconfigure XrController for SLAM/Image Targets
       XR8.XrController.configure({
         disableWorldTracking: false,
+        imageTargetData: [
+          imageTargetAtomic,
+          imageTargetBackPower,
+        ],
       })
 
       // Swap Face modules back for SLAM/Scanning modules
