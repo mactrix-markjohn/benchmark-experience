@@ -131,7 +131,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
       readyBall = ballTemplate.clone()
       readyBall.visible = false
-      scene.add(readyBall)
+      readyBall.position.set(0, -0.2, -0.5) // Center bottom relative to camera
+      if (xrCamera) {
+        xrCamera.add(readyBall)
+      }
     })
   }
 
@@ -215,17 +218,21 @@ export const initBuzzerBeaterModule = (uiManager) => {
   }
 
   // Shoot a ball from the bottom of the screen toward where the camera points
-  const shootBall = (swipeSpeed) => {
+  const shootBall = (swipeSpeed, dx) => {
     if (!gameActive || !ballTemplate || !xrCamera) return
 
     const ball = ballTemplate.clone()
     ball.visible = true
     xrScene.add(ball)
 
-    // The ball starts exactly where the readyBall is
+    // The ball starts exactly where the readyBall is in world space
     if (readyBall) {
-      ball.position.copy(readyBall.position)
-      ball.quaternion.copy(readyBall.quaternion)
+      const worldPos = new THREE.Vector3()
+      const worldQuat = new THREE.Quaternion()
+      readyBall.getWorldPosition(worldPos)
+      readyBall.getWorldQuaternion(worldQuat)
+      ball.position.copy(worldPos)
+      ball.quaternion.copy(worldQuat)
     } else {
       const camPos = new THREE.Vector3()
       const camDir = new THREE.Vector3()
@@ -233,28 +240,33 @@ export const initBuzzerBeaterModule = (uiManager) => {
       xrCamera.getWorldPosition(camPos)
       xrCamera.getWorldDirection(camDir)
       ball.position.copy(camPos)
-      ball.position.addScaledVector(camDir, 0.4)
-      ball.position.addScaledVector(camUp, -0.3)
+      ball.position.addScaledVector(camDir, 0.5)
+      ball.position.addScaledVector(camUp, -0.2)
     }
 
     const camDir = new THREE.Vector3()
     xrCamera.getWorldDirection(camDir)
     
-    // Launch direction: flatten the camera pitch slightly to throw forward, and add an upward arc
-    const launchDir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize()
+    // Launch direction: camera forward with an upward arc boost
+    const launchDir = camDir.clone().normalize()
+
+    // Add horizontal aim offset based on swipe dx
+    const yawOffset = -(dx / window.innerWidth) * 0.8
+    launchDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), yawOffset)
+
+    // Upward pitch boost
+    launchDir.y += 0.35
+    launchDir.normalize()
 
     // speed limit
     const speed = Math.min(Math.max(swipeSpeed, 0.5), 2.5)
     
     // velocity
-    const vx = launchDir.x * speed * SHOOT_POWER
-    const vz = launchDir.z * speed * SHOOT_POWER
-    // Add strong upward arc based on swipe
-    const vy = speed * SHOOT_POWER * 0.8
+    const velocity = launchDir.clone().multiplyScalar(speed * SHOOT_POWER)
 
     activeBalls.push({
       mesh: ball,
-      velocity: new THREE.Vector3(vx, vy, vz),
+      velocity: velocity,
       age: 0,
       scored: false,
       bounces: 0
@@ -371,20 +383,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
     }
   }
 
-  const updateHoopSlide = (delta) => {
-    if (!hoopGroup || !hoopPlaced || !gameActive) return
-
-    hoopSlideOffset += hoopSlideDir * HOOP_SLIDE_SPEED * delta
-
-    if (Math.abs(hoopSlideOffset) > HOOP_SLIDE_RANGE) {
-      hoopSlideDir *= -1
-      hoopSlideOffset = Math.sign(hoopSlideOffset) * HOOP_SLIDE_RANGE
-    }
-
-    // Slide along the hoop's local X axis (left-right from user's perspective)
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(hoopGroup.quaternion)
-    hoopGroup.position.copy(hoopAnchorPos).addScaledVector(right, hoopSlideOffset)
-  }
+  // Hoop sliding logic removed as per user request
 
   // Touch handlers
   const handleTouchStart = (e) => {
@@ -406,15 +405,17 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
   const handleTouchEnd = (e) => {
     if (!swipeStart || !gameActive) return
+    const endX = e.changedTouches[0].clientX
     const endY = e.changedTouches[0].clientY
     const dt = (Date.now() - swipeStart.time) / 1000
+    const dx = endX - swipeStart.x
     const dy = swipeStart.y - endY
     swipeStart = null
 
     // Upward swipe with enough speed
     if (dy > 30 && dt < 1.0) {
       const speed = Math.min(Math.max(dy / (dt * 400), 0.5), 2.5)
-      shootBall(speed)
+      shootBall(speed, dx)
     }
   }
 
@@ -449,23 +450,11 @@ export const initBuzzerBeaterModule = (uiManager) => {
         reticle.rotation.y += 0.015
       }
 
-      // Update readyBall position to stick to the bottom center of the camera
-      if (gameActive && readyBall && xrCamera) {
-        const camPos = new THREE.Vector3()
-        const camDir = new THREE.Vector3()
-        const camUp = new THREE.Vector3(0, 1, 0)
-        xrCamera.getWorldPosition(camPos)
-        xrCamera.getWorldDirection(camDir)
-        
-        readyBall.position.copy(camPos)
-        readyBall.position.addScaledVector(camDir, 0.5) // 0.5m in front
-        readyBall.position.addScaledVector(camUp, -0.2) // 0.2m below eye level
-        
-        // Spin the ready ball slowly for effect
+      // Spin the ready ball slowly for effect
+      if (gameActive && readyBall) {
         readyBall.rotation.y += delta
       }
 
-      updateHoopSlide(delta)
       updateBalls(delta)
     },
 
@@ -484,7 +473,13 @@ export const initBuzzerBeaterModule = (uiManager) => {
         if (hoopGroup) xrScene.remove(hoopGroup)
         if (groundPlane) xrScene.remove(groundPlane)
         if (reticle) xrScene.remove(reticle)
-        if (readyBall) xrScene.remove(readyBall)
+        if (readyBall) {
+          if (readyBall.parent) {
+            readyBall.parent.remove(readyBall)
+          } else {
+            xrScene.remove(readyBall)
+          }
+        }
       }
     }
   }
