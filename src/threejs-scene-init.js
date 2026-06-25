@@ -93,7 +93,8 @@ export const initScenePipelineModule = (gameState, uiManager) => {
         pendingActivation = false
         activateExperience()
       } else {
-        uiManager.showInstruction('Scan the atomic target to unlock!')
+        // Launched from menu — skip scanning, go straight to placement
+        activateExperience()
       }
     }, undefined, (err) => {
       console.error('Model load error:', err)
