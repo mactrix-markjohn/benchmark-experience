@@ -11,6 +11,28 @@ import imageTargetBackPower from '../image-targets/image-target-back-power.json'
 window.THREE = THREE
 window.THREE.GLTFLoader = GLTFLoader
 
+const getLandingPageModule = () => {
+  if (window.LandingPage?.pipelineModule) {
+    return window.LandingPage.pipelineModule()
+  }
+  console.warn('[App] LandingPage module unavailable, continuing without it.')
+  return null
+}
+
+const getCommonPipelineModules = () => {
+  const modules = []
+  const landingPageModule = getLandingPageModule()
+
+  if (landingPageModule) modules.push(landingPageModule)
+
+  return [
+    ...modules,
+    XRExtras.FullWindowCanvas.pipelineModule(),
+    XRExtras.Loading.pipelineModule(),
+    XRExtras.RuntimeError.pipelineModule(),
+  ]
+}
+
 const onxrloaded = () => {
   const gameState = new GameState()
   const uiManager = new UIManager(gameState)
@@ -74,10 +96,7 @@ const onxrloaded = () => {
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
       XR8.XrController.pipelineModule(),
-      LandingPage.pipelineModule(),
-      XRExtras.FullWindowCanvas.pipelineModule(),
-      XRExtras.Loading.pipelineModule(),
-      XRExtras.RuntimeError.pipelineModule(),
+      ...getCommonPipelineModules(),
       scanningModule,
     ])
 
@@ -103,6 +122,20 @@ const onxrloaded = () => {
       })
     }
 
+    const arcadeCard = document.getElementById('arcade-card')
+    if (arcadeCard) {
+      arcadeCard.addEventListener('click', () => {
+        window.location.href = './arcade-basketball.html'
+      })
+    }
+
+    const classicCard = document.getElementById('classic-card')
+    if (classicCard) {
+      classicCard.addEventListener('click', () => {
+        window.location.href = './basketball-classic.html'
+      })
+    }
+
     // Menu "Scan Another Target" close button
     const menuBackBtn = document.getElementById('menu-back-btn')
     if (menuBackBtn) {
@@ -114,6 +147,13 @@ const onxrloaded = () => {
 
     // Initial instruction
     uiManager.showInstruction('Scan an Image Target to Unlock!')
+
+    // Check if we came back with an unlocked target parameter
+    const unlocked = urlParams.get('unlocked')
+    if (unlocked) {
+      uiManager.showMenu(unlocked)
+      uiManager.showInstruction(unlocked === 'power' ? 'Select a Basketball Experience!' : 'Select Mascot or Face Mask.')
+    }
 
     // Run BACK camera for scanning
     XR8.run({
@@ -143,10 +183,7 @@ const onxrloaded = () => {
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
       XR8.XrController.pipelineModule(),
-      LandingPage.pipelineModule(),
-      XRExtras.FullWindowCanvas.pipelineModule(),
-      XRExtras.Loading.pipelineModule(),
-      XRExtras.RuntimeError.pipelineModule(),
+      ...getCommonPipelineModules(),
       mascotModule,
     ])
 
@@ -171,22 +208,19 @@ const onxrloaded = () => {
     const buzzerModule = initBuzzerBeaterModule(uiManager)
 
     XR8.XrController.configure({
-      disableWorldTracking: false,
+      disableWorldTracking: true,
     })
 
     XR8.addCameraPipelineModules([
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
       XR8.XrController.pipelineModule(),
-      LandingPage.pipelineModule(),
-      XRExtras.FullWindowCanvas.pipelineModule(),
-      XRExtras.Loading.pipelineModule(),
-      XRExtras.RuntimeError.pipelineModule(),
+      ...getCommonPipelineModules(),
       buzzerModule,
     ])
 
     uiManager.showBackButton(() => {
-      window.location.href = window.location.pathname
+      window.location.href = './?unlocked=power'
     })
 
     XR8.run({
@@ -225,10 +259,7 @@ const onxrloaded = () => {
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
       XR8.FaceController.pipelineModule(),
-      LandingPage.pipelineModule(),
-      XRExtras.FullWindowCanvas.pipelineModule(),
-      XRExtras.Loading.pipelineModule(),
-      XRExtras.RuntimeError.pipelineModule(),
+      ...getCommonPipelineModules(),
       maskModule,
     ])
 

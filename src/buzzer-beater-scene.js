@@ -1,42 +1,32 @@
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 
-const BALL_RADIUS = 0.12 // 12cm radius
+const BALL_RADIUS = 0.12
 const GAME_DURATION = 20
+const SHOOT_DURATION_MIN = 0.55
+const SHOOT_DURATION_MAX = 0.9
+const ARC_HEIGHT_MIN = 0.65
+const ARC_HEIGHT_MAX = 1.05
 
-// Hoop oscillation
-const HOOP_SLIDE_RANGE = 0.7   // metres to each side
-const HOOP_SLIDE_SPEED = 0.8   // metres per second
-
-// Scripted ball arc (no physics)
-const SHOOT_DURATION = 0.9     // seconds for the ball to travel the arc
-const ARC_HEIGHT = 1.3         // peak height of the arc above the straight line
+const HOOP_LOCAL_POS = new THREE.Vector3(0, 0.18, -2.2)
+const BALL_LOCAL_DISTANCE = 0.38
 
 export const initBuzzerBeaterModule = (uiManager) => {
   let xrScene = null
   let xrCamera = null
-  let groundPlane = null
-  let reticle = null
+  let gameRig = null
 
   let hoopModel = null
-  let hoopGroup = null
-  let hoopPlaced = false
-  let hoopAnchorPos = new THREE.Vector3()
-  let hoopSlideOffset = 0
-  let hoopSlideDir = 1
-
-  // Rim geometry (local to hoopGroup)
+  let hoopAnchor = null
+  let rimTargetObject = null
   let rimLocalCenter = new THREE.Vector3()
-  let rimRadius = 0
-  let hoopScaleFactor = 1
+  let rimRadius = 0.18
 
-  // Ball
   let ballTemplate = null
   let readyBall = null
   let readyBallAnchor = null
-  let ballInFlight = false
-  let activeFlight = null
 
+  let activeShot = null
   let score = 0
   let timeLeft = GAME_DURATION
   let gameActive = false
@@ -44,187 +34,19 @@ export const initBuzzerBeaterModule = (uiManager) => {
   let swipeStart = null
 
   const timer = new THREE.Clock()
-  const raycaster = new THREE.Raycaster()
-  const screenCenter = new THREE.Vector2(0, 0)
 
-  const initScene = ({scene, camera, renderer}) => {
-    renderer.preserveDrawingBuffer = true
-    xrScene = scene
-    xrCamera = camera
-    hoopPlaced = false
-    score = 0
-    timeLeft = GAME_DURATION
-    gameActive = false
-    hoopSlideOffset = 0
-    hoopSlideDir = 1
-    swipeStart = null
-    activeFlight = null
-    ballInFlight = false
-
-    scene.add(new THREE.DirectionalLight(0xffffff, 1.5).translateX(5).translateY(10).translateZ(7))
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
-
-    // Reticle
-    const ringGeo = new THREE.RingGeometry(0.15, 0.2, 32)
-    ringGeo.rotateX(-Math.PI / 2)
-    reticle = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
-      color: 0xff6600, side: THREE.DoubleSide, transparent: true, opacity: 0.8
-    }))
-    reticle.visible = false
-    scene.add(reticle)
-
-    // Ground for placement + shadow
-    const groundGeo = new THREE.PlaneGeometry(100, 100)
-    groundGeo.rotateX(-Math.PI / 2)
-    groundPlane = new THREE.Mesh(groundGeo, new THREE.ShadowMaterial({opacity: 0.5}))
-    groundPlane.receiveShadow = true
-    scene.add(groundPlane)
-
-    setTimeout(() => {
-      if (xrCamera && groundPlane) {
-        const cp = new THREE.Vector3()
-        xrCamera.getWorldPosition(cp)
-        groundPlane.position.y = cp.y - 1.5
-      }
-    }, 500)
-
-    const loader = new GLTFLoader()
-
-    loader.load('assets/basketballhoop.glb', (gltf) => {
-      hoopModel = gltf.scene
-      hoopModel.updateMatrixWorld(true)
-      const box = new THREE.Box3().setFromObject(hoopModel)
-      const size = box.getSize(new THREE.Vector3())
-
-      hoopScaleFactor = 1.5 / size.y
-      hoopModel.scale.set(hoopScaleFactor, hoopScaleFactor, hoopScaleFactor)
-
-      hoopModel.updateMatrixWorld(true)
-      const sBox = new THREE.Box3().setFromObject(hoopModel)
-      const sSize = sBox.getSize(new THREE.Vector3())
-
-      // Rim: ~82% up the hoop, opening radius ~18% of width
-      rimLocalCenter.set(0, sBox.min.y + sSize.y * 0.82, sSize.z * 0.15)
-      rimRadius = sSize.x * 0.18
-
-      hoopGroup = new THREE.Group()
-      hoopGroup.add(hoopModel)
-      hoopGroup.visible = false
-      scene.add(hoopGroup)
-    })
-
-    loader.load('assets/basketballwhite.glb', (gltf) => {
-      ballTemplate = gltf.scene
-      ballTemplate.updateMatrixWorld(true)
-      const box = new THREE.Box3().setFromObject(ballTemplate)
-      const size = box.getSize(new THREE.Vector3())
-      const maxDim = Math.max(size.x, size.y, size.z)
-      if (maxDim > 0) {
-        const scale = (BALL_RADIUS * 2) / maxDim
-        ballTemplate.scale.set(scale, scale, scale)
-      }
-      ballTemplate.traverse((c) => { c.frustumCulled = false })
-
-      readyBallAnchor = new THREE.Group()
-      readyBallAnchor.visible = false
-      readyBall = ballTemplate.clone()
-      readyBall.visible = true
-      readyBall.traverse((c) => { c.frustumCulled = false })
-      readyBallAnchor.add(readyBall)
-      if (xrCamera) {
-        xrCamera.add(readyBallAnchor)
-        updateReadyBallPose()
-      }
-    })
-  }
-
-  // Ball sits low at the centre-bottom of the screen
   const getReadyBallLocalPosition = () => {
-    const distance = 0.9
+    const distance = BALL_LOCAL_DISTANCE
     const fovRad = THREE.MathUtils.degToRad(xrCamera?.fov || 60)
     const halfHeight = Math.tan(fovRad * 0.5) * distance
-    // 0 = centre, 1 = bottom edge. 0.88 sits it near the bottom.
-    const y = -halfHeight * 0.88
-    return new THREE.Vector3(0, y, -distance)
+    return new THREE.Vector3(0, -halfHeight * 3.65, -distance)
   }
 
   const updateReadyBallPose = () => {
-    if (!xrCamera || !readyBallAnchor) return
+    if (!readyBallAnchor) return
     readyBallAnchor.position.copy(getReadyBallLocalPosition())
-    readyBallAnchor.rotation.set(-0.2, 0, 0)
+    readyBallAnchor.rotation.set(-0.35, 0, 0)
     readyBallAnchor.updateMatrixWorld(true)
-  }
-
-  const placeHoop = (point) => {
-    if (!hoopGroup || !hoopModel) return
-
-    hoopGroup.position.copy(point)
-    hoopModel.updateMatrixWorld(true)
-    const box = new THREE.Box3().setFromObject(hoopModel)
-    hoopGroup.position.y -= (box.min.y - point.y) // sit base on the floor
-
-    hoopAnchorPos.copy(hoopGroup.position)
-
-    // Face the camera (Y only)
-    const cp = new THREE.Vector3()
-    xrCamera.getWorldPosition(cp)
-    hoopGroup.lookAt(new THREE.Vector3(cp.x, hoopGroup.position.y, cp.z))
-
-    hoopGroup.visible = true
-    hoopModel.visible = true
-    reticle.visible = false
-    hoopPlaced = true
-    hoopSlideOffset = 0
-    hoopSlideDir = 1
-
-    startGame()
-  }
-
-  const startGame = () => {
-    score = 0
-    timeLeft = GAME_DURATION
-    gameActive = true
-    ballInFlight = false
-    activeFlight = null
-    if (readyBallAnchor) {
-      readyBallAnchor.visible = true
-      if (readyBall) readyBall.visible = true
-      updateReadyBallPose()
-    }
-    updateHUD()
-    showBuzzerHUD(true)
-    uiManager.showInstruction('Swipe up to shoot!')
-
-    if (gameTimer) clearInterval(gameTimer)
-    gameTimer = setInterval(() => {
-      timeLeft--
-      updateHUD()
-      if (timeLeft <= 0) endGame()
-    }, 1000)
-  }
-
-  const endGame = () => {
-    gameActive = false
-    if (readyBallAnchor) readyBallAnchor.visible = false
-    if (gameTimer) { clearInterval(gameTimer); gameTimer = null }
-    showBuzzerHUD(false)
-    uiManager.showInstruction('')
-
-    const overlay = document.getElementById('buzzer-gameover')
-    const finalScore = document.getElementById('buzzer-final-score')
-    if (finalScore) finalScore.innerText = score
-    if (overlay) overlay.classList.add('active')
-
-    const btn = document.getElementById('buzzer-play-again')
-    if (btn) {
-      const newBtn = btn.cloneNode(true)
-      btn.parentNode.replaceChild(newBtn, btn)
-      newBtn.addEventListener('click', () => {
-        overlay.classList.remove('active')
-        if (activeFlight) { xrScene.remove(activeFlight.mesh); activeFlight = null }
-        startGame()
-      })
-    }
   }
 
   const updateHUD = () => {
@@ -240,142 +62,178 @@ export const initBuzzerBeaterModule = (uiManager) => {
   }
 
   const getRimWorldPos = () => {
-    hoopGroup.updateMatrixWorld(true)
-    return hoopGroup.localToWorld(rimLocalCenter.clone())
-  }
+    if (!hoopAnchor) return new THREE.Vector3()
+    hoopAnchor.updateMatrixWorld(true)
 
-  // Continuously oscillate the hoop left <-> right
-  const updateHoopSlide = (delta) => {
-    if (!hoopGroup || !hoopPlaced) return
-
-    hoopSlideOffset += hoopSlideDir * HOOP_SLIDE_SPEED * delta
-    if (hoopSlideOffset > HOOP_SLIDE_RANGE) {
-      hoopSlideOffset = HOOP_SLIDE_RANGE
-      hoopSlideDir = -1
-    } else if (hoopSlideOffset < -HOOP_SLIDE_RANGE) {
-      hoopSlideOffset = -HOOP_SLIDE_RANGE
-      hoopSlideDir = 1
+    if (rimTargetObject) {
+      const rimBox = new THREE.Box3().setFromObject(rimTargetObject)
+      if (!rimBox.isEmpty()) return rimBox.getCenter(new THREE.Vector3())
     }
 
-    // Slide along the hoop's local right axis (left-right from the user's view)
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(hoopGroup.quaternion)
-    hoopGroup.position.copy(hoopAnchorPos).addScaledVector(right, hoopSlideOffset)
+    return hoopAnchor.localToWorld(rimLocalCenter.clone())
   }
 
-  // Launch the ball along a scripted arc toward where the camera is facing
-  const shootBall = () => {
-    if (!gameActive || !ballTemplate || !xrCamera || ballInFlight) return
+  const getArcPoint = (start, control, end, t) => {
+    const invT = 1 - t
+    return new THREE.Vector3()
+      .copy(start).multiplyScalar(invT * invT)
+      .add(control.clone().multiplyScalar(2 * invT * t))
+      .add(end.clone().multiplyScalar(t * t))
+  }
 
-    const ball = ballTemplate.clone()
-    ball.visible = true
-    xrScene.add(ball)
+  const getArcTangent = (start, control, end, t) => {
+    return new THREE.Vector3()
+      .copy(control).sub(start).multiplyScalar(2 * (1 - t))
+      .add(end.clone().sub(control).multiplyScalar(2 * t))
+  }
 
-    const start = new THREE.Vector3()
-    if (readyBallAnchor) readyBallAnchor.getWorldPosition(start)
-    else xrCamera.getWorldPosition(start)
-    ball.position.copy(start)
+  const startGame = () => {
+    score = 0
+    timeLeft = GAME_DURATION
+    gameActive = true
+    activeShot = null
 
-    ballInFlight = true
-    if (readyBall) readyBall.visible = false
-
-    // Camera heading on the horizontal plane (aim by pointing the phone)
-    const camPos = new THREE.Vector3()
-    const camDir = new THREE.Vector3()
-    xrCamera.getWorldPosition(camPos)
-    xrCamera.getWorldDirection(camDir)
-    const heading = new THREE.Vector3(camDir.x, 0, camDir.z)
-    if (heading.lengthSq() < 1e-6) heading.set(0, 0, -1)
-    heading.normalize()
-
-    // Travel to the hoop's depth so a well-aimed shot reaches the rim
-    let dist = 3.0
-    if (hoopPlaced) {
-      dist = Math.hypot(hoopAnchorPos.x - camPos.x, hoopAnchorPos.z - camPos.z)
+    if (readyBallAnchor) {
+      readyBallAnchor.visible = true
+      if (readyBall) readyBall.visible = true
+      updateReadyBallPose()
     }
-    dist = THREE.MathUtils.clamp(dist, 1.2, 6.0)
 
-    const floorY = groundPlane ? groundPlane.position.y : (start.y - 1.3)
-    const end = new THREE.Vector3(
-      camPos.x + heading.x * dist,
-      floorY + BALL_RADIUS,
-      camPos.z + heading.z * dist
-    )
+    updateHUD()
+    showBuzzerHUD(true)
+    uiManager.showInstruction('Swipe up to shoot!')
 
-    activeFlight = {
-      mesh: ball,
-      t: 0,
-      start: start.clone(),
+    if (gameTimer) clearInterval(gameTimer)
+    gameTimer = setInterval(() => {
+      timeLeft -= 1
+      updateHUD()
+      if (timeLeft <= 0) endGame()
+    }, 1000)
+  }
+
+  const endGame = () => {
+    gameActive = false
+    if (readyBallAnchor) readyBallAnchor.visible = false
+    if (gameTimer) {
+      clearInterval(gameTimer)
+      gameTimer = null
+    }
+    showBuzzerHUD(false)
+    uiManager.showInstruction('')
+
+    const overlay = document.getElementById('buzzer-gameover')
+    const finalScore = document.getElementById('buzzer-final-score')
+    if (finalScore) finalScore.innerText = score
+    if (overlay) overlay.classList.add('active')
+
+    const btn = document.getElementById('buzzer-play-again')
+    if (btn) {
+      const newBtn = btn.cloneNode(true)
+      btn.parentNode.replaceChild(newBtn, btn)
+      newBtn.addEventListener('click', () => {
+        overlay.classList.remove('active')
+        if (activeShot?.mesh?.parent) activeShot.mesh.parent.remove(activeShot.mesh)
+        activeShot = null
+        startGame()
+      })
+    }
+  }
+
+  const configureHoopRig = () => {
+    if (!gameRig || !hoopAnchor || !hoopModel) return
+
+    hoopAnchor.position.copy(HOOP_LOCAL_POS)
+    hoopAnchor.rotation.set(0, 0, 0)
+    hoopAnchor.visible = true
+    hoopModel.visible = true
+
+    hoopAnchor.updateMatrixWorld(true)
+    const cameraWorld = new THREE.Vector3()
+    xrCamera.getWorldPosition(cameraWorld)
+    hoopAnchor.lookAt(new THREE.Vector3(cameraWorld.x, hoopAnchor.getWorldPosition(new THREE.Vector3()).y, cameraWorld.z))
+    hoopAnchor.rotateY(Math.PI)
+    hoopAnchor.updateMatrixWorld(true)
+  }
+
+  const shootBall = (swipeStrength = 0.5) => {
+    if (!gameActive || !ballTemplate || !readyBallAnchor || activeShot) return
+
+    const shotBall = ballTemplate.clone()
+    shotBall.visible = true
+    shotBall.traverse((child) => {
+      child.frustumCulled = false
+    })
+    gameRig.add(shotBall)
+
+    const start = readyBallAnchor.position.clone()
+    const rimWorld = getRimWorldPos()
+    const end = gameRig.worldToLocal(rimWorld.clone()).add(new THREE.Vector3(0, -BALL_RADIUS * 0.55, 0))
+    const duration = THREE.MathUtils.lerp(SHOOT_DURATION_MAX, SHOOT_DURATION_MIN, swipeStrength)
+    const midpoint = start.clone().lerp(end, 0.5)
+    const control = midpoint.add(new THREE.Vector3(0, THREE.MathUtils.lerp(ARC_HEIGHT_MIN, ARC_HEIGHT_MAX, swipeStrength), 0))
+
+    shotBall.position.copy(start)
+    activeShot = {
+      mesh: shotBall,
+      start,
+      control,
       end,
-      scored: false
+      duration,
+      t: 0,
+      scored: false,
     }
+
+    if (readyBall) readyBall.visible = false
   }
 
-  // Advance the scripted arc each frame
-  const updateFlight = (delta) => {
-    if (!activeFlight) return
-    const f = activeFlight
-    f.t += delta / SHOOT_DURATION
-    const t = Math.min(f.t, 1)
+  const updateShot = (delta) => {
+    if (!activeShot) return
 
-    // Horizontal: straight line. Vertical: parabolic arch.
-    const x = THREE.MathUtils.lerp(f.start.x, f.end.x, t)
-    const z = THREE.MathUtils.lerp(f.start.z, f.end.z, t)
-    const linearY = THREE.MathUtils.lerp(f.start.y, f.end.y, t)
-    const arch = 4 * ARC_HEIGHT * t * (1 - t)
-    f.mesh.position.set(x, linearY + arch, z)
+    activeShot.t += delta / activeShot.duration
+    const t = Math.min(activeShot.t, 1)
+    const pos = getArcPoint(activeShot.start, activeShot.control, activeShot.end, t)
+    activeShot.mesh.position.copy(pos)
 
-    // Spin for realism
-    f.mesh.rotation.x += delta * 6
-    f.mesh.rotation.z += delta * 3
+    const tangent = getArcTangent(activeShot.start, activeShot.control, activeShot.end, Math.min(t + 0.01, 1))
+    if (tangent.lengthSq() > 1e-6) {
+      tangent.normalize()
+      activeShot.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent)
+    }
+    activeShot.mesh.rotateZ(delta * 10)
 
-    // Scoring: during the descent, is the ball aligned with the (moving) rim?
-    if (!f.scored && hoopGroup && t > 0.4) {
-      const rim = getRimWorldPos()
-      const hDist = Math.hypot(f.mesh.position.x - rim.x, f.mesh.position.z - rim.z)
-      const nearRimHeight = Math.abs(f.mesh.position.y - rim.y) < BALL_RADIUS * 2.5
-      if (hDist < rimRadius * 1.2 && nearRimHeight) {
-        f.scored = true
-        score++
+    const rimLocal = gameRig.worldToLocal(getRimWorldPos().clone())
+    if (!activeShot.scored && t > 0.62) {
+      const hDist = Math.hypot(activeShot.mesh.position.x - rimLocal.x, activeShot.mesh.position.z - rimLocal.z)
+      const nearRimHeight = Math.abs(activeShot.mesh.position.y - rimLocal.y) < BALL_RADIUS * 1.5
+      if (hDist < rimRadius * 0.8 && nearRimHeight) {
+        activeShot.scored = true
+        score += 1
         updateHUD()
         uiManager.showInstruction('SCORE! 🏀 +1')
-        setTimeout(() => { if (gameActive) uiManager.showInstruction('Swipe up to shoot!') }, 600)
+        setTimeout(() => {
+          if (gameActive) uiManager.showInstruction('Swipe up to shoot!')
+        }, 600)
       }
     }
 
-    // Flight finished -> respawn the ready ball
     if (t >= 1) {
-      xrScene.remove(f.mesh)
-      activeFlight = null
-      respawnReadyBall()
+      if (activeShot.mesh.parent) activeShot.mesh.parent.remove(activeShot.mesh)
+      activeShot = null
+      if (readyBall) {
+        readyBall.visible = true
+        readyBall.rotation.set(0, 0, 0)
+      }
     }
   }
 
-  const respawnReadyBall = () => {
-    ballInFlight = false
-    if (readyBall) {
-      readyBall.visible = true
-      readyBall.rotation.set(0, 0, 0)
-    }
-    if (readyBallAnchor) updateReadyBallPose()
-  }
-
-  // Touch handlers
   const handleTouchStart = (e) => {
     if (e.cancelable) e.preventDefault()
-    if (!hoopPlaced) {
-      if (!xrCamera || !groundPlane) return
-      const t = e.touches[0]
-      const ndc = new THREE.Vector2(
-        (t.clientX / window.innerWidth) * 2 - 1,
-        -(t.clientY / window.innerHeight) * 2 + 1
-      )
-      raycaster.setFromCamera(ndc, xrCamera)
-      const hits = raycaster.intersectObject(groundPlane)
-      if (hits.length > 0) placeHoop(hits[0].point)
-      return
-    }
     if (!gameActive) return
-    swipeStart = {x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now()}
+    swipeStart = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    }
   }
 
   const handleTouchMove = (e) => {
@@ -385,15 +243,93 @@ export const initBuzzerBeaterModule = (uiManager) => {
   const handleTouchEnd = (e) => {
     if (e.cancelable) e.preventDefault()
     if (!swipeStart || !gameActive) return
+
     const endY = e.changedTouches[0].clientY
     const dt = (Date.now() - swipeStart.time) / 1000
     const dy = swipeStart.y - endY
     swipeStart = null
 
-    // Any deliberate upward swipe shoots the ball
     if (dy > 30 && dt < 1.2) {
-      shootBall()
+      const swipeStrength = THREE.MathUtils.clamp((dy / Math.max(window.innerHeight * 0.28, 1)) * 0.8, 0, 1)
+      shootBall(swipeStrength)
     }
+  }
+
+  const initScene = ({scene, camera, renderer}) => {
+    renderer.preserveDrawingBuffer = true
+    xrScene = scene
+    xrCamera = camera
+    score = 0
+    timeLeft = GAME_DURATION
+    gameActive = false
+    swipeStart = null
+    activeShot = null
+
+    scene.add(new THREE.DirectionalLight(0xffffff, 1.5).translateX(5).translateY(10).translateZ(7))
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
+
+    gameRig = new THREE.Group()
+    xrCamera.add(gameRig)
+
+    const loader = new GLTFLoader()
+
+    loader.load('assets/HoopwithObject.glb', (gltf) => {
+      hoopModel = gltf.scene
+      hoopModel.rotation.x = -Math.PI / 2
+      hoopModel.updateMatrixWorld(true)
+
+      const box = new THREE.Box3().setFromObject(hoopModel)
+      const size = box.getSize(new THREE.Vector3())
+      const hoopScaleFactor = 1.35 / Math.max(size.y, 0.001)
+      hoopModel.scale.setScalar(hoopScaleFactor)
+
+      hoopAnchor = new THREE.Group()
+      hoopAnchor.add(hoopModel)
+      hoopAnchor.visible = false
+      gameRig.add(hoopAnchor)
+
+      rimTargetObject = hoopModel.getObjectByName('Object_6') || null
+      hoopAnchor.updateMatrixWorld(true)
+
+      if (rimTargetObject) {
+        const rimBox = new THREE.Box3().setFromObject(rimTargetObject)
+        const rimCenterWorld = rimBox.getCenter(new THREE.Vector3())
+        const rimSize = rimBox.getSize(new THREE.Vector3())
+        rimLocalCenter.copy(hoopAnchor.worldToLocal(rimCenterWorld.clone()))
+        rimRadius = Math.max(rimSize.x, rimSize.z) * 0.5
+      }
+
+      configureHoopRig()
+      hoopPlaced = true
+      if (ballTemplate && readyBallAnchor) startGame()
+    })
+
+    loader.load('assets/basketballwhite.glb', (gltf) => {
+      ballTemplate = gltf.scene
+      ballTemplate.updateMatrixWorld(true)
+      const box = new THREE.Box3().setFromObject(ballTemplate)
+      const size = box.getSize(new THREE.Vector3())
+      const maxDim = Math.max(size.x, size.y, size.z)
+      if (maxDim > 0) {
+        const scale = (BALL_RADIUS * 2) / maxDim
+        ballTemplate.scale.set(scale, scale, scale)
+      }
+      ballTemplate.traverse((child) => {
+        child.frustumCulled = false
+      })
+
+      readyBallAnchor = new THREE.Group()
+      readyBall = ballTemplate.clone()
+      readyBall.visible = true
+      readyBall.traverse((child) => {
+        child.frustumCulled = false
+      })
+      readyBallAnchor.add(readyBall)
+      gameRig.add(readyBallAnchor)
+      updateReadyBallPose()
+
+      if (hoopPlaced) startGame()
+    })
   }
 
   return {
@@ -404,62 +340,56 @@ export const initBuzzerBeaterModule = (uiManager) => {
       if (!xrData) return
       initScene(xrData)
 
+      const placeNetBtn = document.getElementById('buzzer-place-btn')
+      if (placeNetBtn) placeNetBtn.style.display = 'none'
+
       const canvas = document.getElementById('camerafeed')
       canvas.addEventListener('touchstart', handleTouchStart, {passive: false})
       canvas.addEventListener('touchmove', handleTouchMove, {passive: false})
       canvas.addEventListener('touchend', handleTouchEnd, {passive: false})
 
-      uiManager.showInstruction('Tap the floor to place the hoop!')
+      uiManager.showInstruction('Loading hoop...')
     },
 
     onUpdate: () => {
       const delta = timer.getDelta()
 
-      // Placement reticle
-      if (!hoopPlaced && reticle && xrCamera && groundPlane) {
-        raycaster.setFromCamera(screenCenter, xrCamera)
-        const hits = raycaster.intersectObject(groundPlane)
-        if (hits.length > 0) {
-          reticle.position.copy(hits[0].point)
-          reticle.position.y += 0.02
-          reticle.visible = true
-        } else {
-          reticle.visible = false
-        }
-        reticle.rotation.y += 0.015
+      if (gameRig?.parent !== xrCamera && xrCamera) {
+        xrCamera.add(gameRig)
       }
 
-      // Keep the ready ball anchored to the camera
-      if (readyBallAnchor && readyBallAnchor.parent !== xrCamera && xrCamera) {
-        xrCamera.add(readyBallAnchor)
+      if (readyBallAnchor) updateReadyBallPose()
+      if (gameActive && readyBall && !activeShot) {
+        readyBall.rotation.y += delta * 1.2
       }
-      if (gameActive && readyBallAnchor) updateReadyBallPose()
-      if (gameActive && readyBall && !ballInFlight) readyBall.rotation.y += delta * 1.2
 
-      updateHoopSlide(delta)
-      updateFlight(delta)
+      updateShot(delta)
     },
 
     onStop: () => {
-      if (gameTimer) { clearInterval(gameTimer); gameTimer = null }
+      if (gameTimer) {
+        clearInterval(gameTimer)
+        gameTimer = null
+      }
+
       gameActive = false
       showBuzzerHUD(false)
+
       const canvas = document.getElementById('camerafeed')
       if (canvas) {
         canvas.removeEventListener('touchstart', handleTouchStart)
         canvas.removeEventListener('touchmove', handleTouchMove)
         canvas.removeEventListener('touchend', handleTouchEnd)
       }
-      if (activeFlight && xrScene) { xrScene.remove(activeFlight.mesh); activeFlight = null }
-      if (xrScene) {
-        if (hoopGroup) xrScene.remove(hoopGroup)
-        if (groundPlane) xrScene.remove(groundPlane)
-        if (reticle) xrScene.remove(reticle)
-        if (readyBallAnchor) {
-          if (readyBallAnchor.parent) readyBallAnchor.parent.remove(readyBallAnchor)
-          else xrScene.remove(readyBallAnchor)
-        }
-      }
-    }
+
+      if (activeShot?.mesh?.parent) activeShot.mesh.parent.remove(activeShot.mesh)
+      activeShot = null
+
+      if (gameRig?.parent) gameRig.parent.remove(gameRig)
+      gameRig = null
+      hoopAnchor = null
+      readyBallAnchor = null
+      readyBall = null
+    },
   }
 }

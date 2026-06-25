@@ -167,6 +167,17 @@
       color: rgba(255,255,255,0.9);
     }
 
+    #buzzer-place-btn {
+      position: absolute;
+      left: 50%;
+      bottom: 112px;
+      transform: translateX(-50%);
+      display: none;
+      z-index: 999;
+      min-width: 180px;
+      pointer-events: auto;
+    }
+
     /* --- Found overlay --- */
     #found-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -348,7 +359,17 @@
       <div class="menu-card buzzer" id="buzzer-card" style="display: none;">
         <div class="menu-card-icon">🏀</div>
         <div class="menu-card-title">Buzzer Beater</div>
-        <div class="menu-card-desc">Shoot basketballs into a virtual hoop on the floor!</div>
+        <div class="menu-card-desc">Shoot basketballs into a virtual hoop on the floor! (Three.js)</div>
+      </div>
+      <div class="menu-card buzzer" id="arcade-card" style="display: none;">
+        <div class="menu-card-icon">🎰</div>
+        <div class="menu-card-title">Arcade Basketball</div>
+        <div class="menu-card-desc">8thWall official A-Frame arcade machine simulation experience.</div>
+      </div>
+      <div class="menu-card buzzer" id="classic-card" style="display: none;">
+        <div class="menu-card-icon">🏆</div>
+        <div class="menu-card-title">Basketball Classic</div>
+        <div class="menu-card-desc">8thWall official A-Frame basketball shooter experience.</div>
       </div>
     </div>
     <button id="menu-back-btn" class="btn-outline" style="margin-top: 24px; max-width: 320px; width: 100%;">Scan Another Target</button>
@@ -360,6 +381,7 @@
   <!-- HUD -->
   <div id="score-pill"></div>
   <div id="instruction"></div>
+  <button id="buzzer-place-btn" class="btn-primary">Place Net</button>
 
   <!-- Found overlay -->
   <div id="found-overlay">

@@ -9,6 +9,8 @@ export class UIManager {
     this.mascotCard = document.getElementById('mascot-card')
     this.maskCard = document.getElementById('mask-card')
     this.buzzerCard = document.getElementById('buzzer-card')
+    this.arcadeCard = document.getElementById('arcade-card')
+    this.classicCard = document.getElementById('classic-card')
     this.backBtn = document.getElementById('back-btn')
 
     this.foundOverlay = document.getElementById('found-overlay')
@@ -51,10 +53,14 @@ export class UIManager {
       if (this.mascotCard) this.mascotCard.style.display = 'block'
       if (this.maskCard) this.maskCard.style.display = 'block'
       if (this.buzzerCard) this.buzzerCard.style.display = 'none'
+      if (this.arcadeCard) this.arcadeCard.style.display = 'none'
+      if (this.classicCard) this.classicCard.style.display = 'none'
     } else if (unlockedType === 'power') {
       if (this.mascotCard) this.mascotCard.style.display = 'none'
       if (this.maskCard) this.maskCard.style.display = 'none'
       if (this.buzzerCard) this.buzzerCard.style.display = 'block'
+      if (this.arcadeCard) this.arcadeCard.style.display = 'block'
+      if (this.classicCard) this.classicCard.style.display = 'block'
     }
   }
 

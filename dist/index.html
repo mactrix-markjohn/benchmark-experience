@@ -10,8 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
 
   <script src="./external/xr/xr.js?v=7" async data-preload-chunks="face, slam"></script>
-  <script src="https://cdn.8thwall.com/web/xrextras/xrextras.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.8thwall.com/web/landing-page/landing-page.js" crossorigin="anonymous"></script>
+  <script src="./external/xrextras/xrextras.js"></script>
+  <script src="./external/landing-page/landing-page.js"></script>
 
   <style>
     :root {
@@ -36,6 +36,7 @@
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       z-index: 1; display: block;
+      touch-action: none;
     }
 
     /* --- Menu Screen --- */
@@ -96,6 +97,7 @@
       position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
       display: none; gap: 20px; align-items: center;
       z-index: 999;
+      pointer-events: none;
     }
     .buzzer-stat {
       background: var(--glass); backdrop-filter: blur(10px);
@@ -148,6 +150,7 @@
       font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
       border: 1px solid rgba(255,255,255,0.12);
       z-index: 999; display: none;
+      pointer-events: none;
       color: var(--cyan);
     }
 
@@ -159,8 +162,20 @@
       font-size: 0.8rem; font-weight: 600; text-align: center;
       border: 1px solid rgba(255,255,255,0.08);
       z-index: 999; display: none;
+      pointer-events: none;
       max-width: 85%; white-space: nowrap;
       color: rgba(255,255,255,0.9);
+    }
+
+    #buzzer-place-btn {
+      position: absolute;
+      left: 50%;
+      bottom: 112px;
+      transform: translateX(-50%);
+      display: none;
+      z-index: 999;
+      min-width: 180px;
+      pointer-events: auto;
     }
 
     /* --- Found overlay --- */
@@ -253,21 +268,28 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-DL0ElPIv.js"></script>
+  <script type="module" crossorigin src="./assets/main-Wh_cLf2A.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-Dezn_h7o.js">
 </head>
 <body>
-  <div id="debug-log-panel" style="position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.85); color: #ff3333; font-family: monospace; font-size: 10px; padding: 10px; border-radius: 8px; z-index: 99999; max-height: 200px; overflow-y: auto; word-break: break-all; border: 1px solid red;">
+  <div id="debug-log-panel" style="position: fixed; top: 6px; right: 6px; width: 140px; background: rgba(0,0,0,0.55); color: #ff5555; font-family: monospace; font-size: 7px; line-height: 1.3; padding: 5px; border-radius: 6px; z-index: 99999; max-height: 90px; overflow-y: auto; word-break: break-all; border: 1px solid rgba(255,0,0,0.4); pointer-events: none; display: none; opacity: 0.65;">
     <strong>Debug Log:</strong><br>
   </div>
   <script>
     (function() {
       const panel = document.getElementById('debug-log-panel');
+      const debugEnabled = new URLSearchParams(window.location.search).get('debug') === 'true';
+      if (debugEnabled) {
+        panel.style.display = 'block';
+      }
       function log(msg) {
+        if (!debugEnabled) return;
         panel.innerHTML += msg + '<br>';
         panel.scrollTop = panel.scrollHeight;
       }
       window.logToScreen = log;
       window.addEventListener('error', function(e) {
+        if (!debugEnabled) return;
         let msg = 'ERR: ' + e.message + ' at ' + e.filename + ':' + e.lineno;
         if (e.error && e.error.stack) {
           msg += '<br>Stack: ' + e.error.stack.replace(/\n/g, '<br>');
@@ -275,6 +297,7 @@
         log(msg);
       }, true);
       window.addEventListener('unhandledrejection', function(e) {
+        if (!debugEnabled) return;
         let msg = 'REJ: ' + e.reason;
         if (e.reason && e.reason.stack) {
           msg += '<br>Stack: ' + e.reason.stack.replace(/\n/g, '<br>');
@@ -284,23 +307,25 @@
       const originalConsoleError = console.error;
       console.error = function() {
         const args = Array.prototype.slice.call(arguments);
-        let msg = 'CON_ERR: ' + args.join(' ');
-        args.forEach(arg => {
-          if (arg && arg.stack) {
-            msg += '<br>Stack: ' + arg.stack.replace(/\n/g, '<br>');
-          }
-        });
-        log(msg);
+        if (debugEnabled) {
+          let msg = 'CON_ERR: ' + args.join(' ');
+          args.forEach(arg => {
+            if (arg && arg.stack) {
+              msg += '<br>Stack: ' + arg.stack.replace(/\n/g, '<br>');
+            }
+          });
+          log(msg);
+        }
         originalConsoleError.apply(console, arguments);
       };
       const originalConsoleWarn = console.warn;
       console.warn = function() {
-        log('CON_WARN: ' + Array.prototype.slice.call(arguments).join(' '));
+        if (debugEnabled) log('CON_WARN: ' + Array.prototype.slice.call(arguments).join(' '));
         originalConsoleWarn.apply(console, arguments);
       };
       const originalConsoleLog = console.log;
       console.log = function() {
-        log('CON_LOG: ' + Array.prototype.slice.call(arguments).join(' '));
+        if (debugEnabled) log('CON_LOG: ' + Array.prototype.slice.call(arguments).join(' '));
         originalConsoleLog.apply(console, arguments);
       };
       log('Debugger initialized. UA: ' + navigator.userAgent);
@@ -336,7 +361,17 @@
       <div class="menu-card buzzer" id="buzzer-card" style="display: none;">
         <div class="menu-card-icon">🏀</div>
         <div class="menu-card-title">Buzzer Beater</div>
-        <div class="menu-card-desc">Shoot basketballs into a virtual hoop on the floor!</div>
+        <div class="menu-card-desc">Shoot basketballs into a virtual hoop on the floor! (Three.js)</div>
+      </div>
+      <div class="menu-card buzzer" id="arcade-card" style="display: none;">
+        <div class="menu-card-icon">🎰</div>
+        <div class="menu-card-title">Arcade Basketball</div>
+        <div class="menu-card-desc">8thWall official A-Frame arcade machine simulation experience.</div>
+      </div>
+      <div class="menu-card buzzer" id="classic-card" style="display: none;">
+        <div class="menu-card-icon">🏆</div>
+        <div class="menu-card-title">Basketball Classic</div>
+        <div class="menu-card-desc">8thWall official A-Frame basketball shooter experience.</div>
       </div>
     </div>
     <button id="menu-back-btn" class="btn-outline" style="margin-top: 24px; max-width: 320px; width: 100%;">Scan Another Target</button>
@@ -348,6 +383,7 @@
   <!-- HUD -->
   <div id="score-pill"></div>
   <div id="instruction"></div>
+  <button id="buzzer-place-btn" class="btn-primary">Place Net</button>
 
   <!-- Found overlay -->
   <div id="found-overlay">
