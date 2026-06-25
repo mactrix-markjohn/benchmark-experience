@@ -3,10 +3,11 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 
 const UNITS_PER_METER = 1.0 / 0.21
 const GRAVITY = -9.8 * UNITS_PER_METER
-const BALL_RADIUS = 0.12 * UNITS_PER_METER
+const BALL_RADIUS = 0.15 * UNITS_PER_METER
 const GAME_DURATION = 20
-const HOOP_SLIDE_SPEED = 1.5
-const HOOP_SLIDE_RANGE = 2.0 * UNITS_PER_METER
+const HOOP_SLIDE_SPEED = 1.2
+const HOOP_SLIDE_RANGE = 1.5 * UNITS_PER_METER
+const SHOOT_POWER = 12.0 * UNITS_PER_METER
 
 export const initBuzzerBeaterModule = (uiManager) => {
   let xrScene = null
@@ -17,13 +18,15 @@ export const initBuzzerBeaterModule = (uiManager) => {
   let hoopModel = null
   let hoopGroup = null
   let hoopPlaced = false
-  let hoopCenter = new THREE.Vector3()
+  let hoopAnchorPos = new THREE.Vector3()
   let hoopSlideDir = 1
+  let hoopSlideOffset = 0
 
-  // Collision geometry
-  let rimCenter = new THREE.Vector3()
-  let rimRadius = 0.0
-  let backboardBox = null
+  // Collision: rim is a circle at a fixed height on the hoop
+  let rimLocalCenter = new THREE.Vector3()
+  let rimRadius = 0
+  let backboardLocalBox = null
+  let hoopScaleFactor = 1
 
   const activeBalls = []
   let ballTemplate = null
@@ -34,7 +37,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
   let gameTimer = null
   let swipeStart = null
 
-  const clock = new THREE.Clock()
+  const timer = new THREE.Clock()
   const raycaster = new THREE.Raycaster()
   const screenCenter = new THREE.Vector2(0, 0)
 
@@ -47,14 +50,12 @@ export const initBuzzerBeaterModule = (uiManager) => {
     timeLeft = GAME_DURATION
     gameActive = false
     activeBalls.length = 0
+    hoopSlideOffset = 0
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5)
-    dirLight.position.set(5, 10, 7)
-    dirLight.castShadow = true
-    scene.add(dirLight)
+    scene.add(new THREE.DirectionalLight(0xffffff, 1.5).translateX(5).translateY(10).translateZ(7))
     scene.add(new THREE.AmbientLight(0xffffff, 0.7))
 
-    // Ground reticle
+    // Reticle
     const ringGeo = new THREE.RingGeometry(0.5, 0.6, 32)
     ringGeo.rotateX(-Math.PI / 2)
     reticle = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
@@ -63,12 +64,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
     reticle.visible = false
     scene.add(reticle)
 
-    // Ground plane for raycasting
+    // Ground
     const groundGeo = new THREE.PlaneGeometry(500, 500)
     groundGeo.rotateX(-Math.PI / 2)
-    groundPlane = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({
-      visible: false, side: THREE.DoubleSide
-    }))
+    groundPlane = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}))
     scene.add(groundPlane)
 
     setTimeout(() => {
@@ -83,25 +82,27 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
     loader.load('assets/basketballhoop.glb', (gltf) => {
       hoopModel = gltf.scene
-
       hoopModel.updateMatrixWorld(true)
       const box = new THREE.Box3().setFromObject(hoopModel)
       const size = box.getSize(new THREE.Vector3())
-      const hoopScale = (2.0 * UNITS_PER_METER) / size.y
-      hoopModel.scale.set(hoopScale, hoopScale, hoopScale)
+
+      // Scale hoop to ~1.5m tall for AR
+      hoopScaleFactor = (1.5 * UNITS_PER_METER) / size.y
+      hoopModel.scale.set(hoopScaleFactor, hoopScaleFactor, hoopScaleFactor)
 
       hoopModel.updateMatrixWorld(true)
-      const scaledBox = new THREE.Box3().setFromObject(hoopModel)
-      const scaledSize = scaledBox.getSize(new THREE.Vector3())
+      const sBox = new THREE.Box3().setFromObject(hoopModel)
+      const sSize = sBox.getSize(new THREE.Vector3())
 
-      rimCenter = new THREE.Vector3(0, scaledBox.min.y + scaledSize.y * 0.85, 0)
-      rimRadius = scaledSize.x * 0.2
+      // Rim: roughly 85% up the hoop, the opening radius ~20% of width
+      rimLocalCenter.set(0, sBox.min.y + sSize.y * 0.82, sSize.z * 0.15)
+      rimRadius = sSize.x * 0.18
 
-      const bbMin = new THREE.Vector3(
-        scaledBox.min.x, scaledBox.min.y + scaledSize.y * 0.75, scaledBox.min.z
+      // Backboard: top portion of the hoop
+      backboardLocalBox = new THREE.Box3(
+        new THREE.Vector3(sBox.min.x, sBox.min.y + sSize.y * 0.7, sBox.min.z),
+        new THREE.Vector3(sBox.max.x, sBox.max.y, sBox.min.z + sSize.z * 0.2)
       )
-      const bbMax = scaledBox.max.clone()
-      backboardBox = new THREE.Box3(bbMin, bbMax)
 
       hoopGroup = new THREE.Group()
       hoopGroup.add(hoopModel)
@@ -109,27 +110,24 @@ export const initBuzzerBeaterModule = (uiManager) => {
       scene.add(hoopGroup)
     })
 
-    loader.load('assets/basketballwhite.glb', (gltf) => {
-      ballTemplate = gltf.scene
-      ballTemplate.updateMatrixWorld(true)
-      const box = new THREE.Box3().setFromObject(ballTemplate)
-      const size = box.getSize(new THREE.Vector3())
-      const ballScale = (BALL_RADIUS * 2) / Math.max(size.x, size.y, size.z)
-      ballTemplate.scale.set(ballScale, ballScale, ballScale)
-      ballTemplate.visible = false
-    })
+    // Ball - create a simple orange sphere (more visible than white GLB)
+    const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 24, 24)
+    const ballMat = new THREE.MeshStandardMaterial({color: 0xff6600, roughness: 0.6})
+    ballTemplate = new THREE.Mesh(ballGeo, ballMat)
+    ballTemplate.visible = false
   }
 
   const placeHoop = (point) => {
     if (!hoopGroup || !hoopModel) return
-    hoopGroup.position.copy(point)
 
+    hoopGroup.position.copy(point)
     hoopModel.updateMatrixWorld(true)
     const box = new THREE.Box3().setFromObject(hoopModel)
-    hoopGroup.position.y -= box.min.y - point.y
+    hoopGroup.position.y -= (box.min.y - point.y)
 
-    hoopCenter.copy(hoopGroup.position)
+    hoopAnchorPos.copy(hoopGroup.position)
 
+    // Face camera
     const cp = new THREE.Vector3()
     xrCamera.getWorldPosition(cp)
     hoopGroup.lookAt(new THREE.Vector3(cp.x, hoopGroup.position.y, cp.z))
@@ -138,6 +136,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
     hoopModel.visible = true
     reticle.visible = false
     hoopPlaced = true
+    hoopSlideOffset = 0
 
     startGame()
   }
@@ -150,6 +149,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
     showBuzzerHUD(true)
     uiManager.showInstruction('Swipe up to shoot!')
 
+    if (gameTimer) clearInterval(gameTimer)
     gameTimer = setInterval(() => {
       timeLeft--
       updateHUD()
@@ -168,10 +168,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
     if (finalScore) finalScore.innerText = score
     if (overlay) overlay.classList.add('active')
 
-    const playAgainBtn = document.getElementById('buzzer-play-again')
-    if (playAgainBtn) {
-      const newBtn = playAgainBtn.cloneNode(true)
-      playAgainBtn.parentNode.replaceChild(newBtn, playAgainBtn)
+    const btn = document.getElementById('buzzer-play-again')
+    if (btn) {
+      const newBtn = btn.cloneNode(true)
+      btn.parentNode.replaceChild(newBtn, btn)
       newBtn.addEventListener('click', () => {
         overlay.classList.remove('active')
         activeBalls.forEach(b => xrScene.remove(b.mesh))
@@ -182,10 +182,10 @@ export const initBuzzerBeaterModule = (uiManager) => {
   }
 
   const updateHUD = () => {
-    const timerEl = document.getElementById('buzzer-timer')
-    const scoreEl = document.getElementById('buzzer-score')
-    if (timerEl) timerEl.innerText = `${timeLeft}s`
-    if (scoreEl) scoreEl.innerText = `${score}`
+    const t = document.getElementById('buzzer-timer')
+    const s = document.getElementById('buzzer-score')
+    if (t) t.innerText = `${timeLeft}s`
+    if (s) s.innerText = `${score}`
   }
 
   const showBuzzerHUD = (show) => {
@@ -193,8 +193,9 @@ export const initBuzzerBeaterModule = (uiManager) => {
     if (hud) hud.style.display = show ? 'flex' : 'none'
   }
 
+  // Shoot a ball from the bottom of the screen toward where the camera points
   const shootBall = (swipeSpeed) => {
-    if (!gameActive || !ballTemplate || !xrCamera || !hoopGroup) return
+    if (!gameActive || !ballTemplate || !xrCamera) return
 
     const ball = ballTemplate.clone()
     ball.visible = true
@@ -202,26 +203,30 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
     const camPos = new THREE.Vector3()
     const camDir = new THREE.Vector3()
+    const camRight = new THREE.Vector3()
+    const camUp = new THREE.Vector3()
     xrCamera.getWorldPosition(camPos)
     xrCamera.getWorldDirection(camDir)
 
+    // Get camera's local axes
+    camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize()
+    camUp.crossVectors(camRight, camDir).normalize()
+
+    // Start ball in front of camera, offset down so it's visible at bottom of screen
     ball.position.copy(camPos)
-    ball.position.addScaledVector(camDir, 1.0)
-    ball.position.y -= 0.5 * UNITS_PER_METER
+    ball.position.addScaledVector(camDir, 1.5)
+    ball.position.addScaledVector(camUp, -0.8)
 
-    // Aim at the hoop's current world position (rim height)
-    const hoopWorldPos = new THREE.Vector3()
-    hoopGroup.getWorldPosition(hoopWorldPos)
-    const rimWorldY = rimCenter.y + hoopGroup.position.y
-    hoopWorldPos.y = rimWorldY
+    // Launch direction: forward and up (like throwing a basketball)
+    const launchDir = new THREE.Vector3()
+    launchDir.copy(camDir)
+    launchDir.y = 0
+    launchDir.normalize()
 
-    const toHoop = new THREE.Vector3().subVectors(hoopWorldPos, ball.position)
-    const dist = toHoop.length()
-    const flightTime = Math.max(dist / (swipeSpeed * 8 * UNITS_PER_METER), 0.3)
-
-    const vx = toHoop.x / flightTime
-    const vz = toHoop.z / flightTime
-    const vy = (toHoop.y - 0.5 * GRAVITY * flightTime * flightTime) / flightTime
+    const power = swipeSpeed * SHOOT_POWER
+    const vx = launchDir.x * power * 0.7
+    const vz = launchDir.z * power * 0.7
+    const vy = power * 0.6 // Upward arc
 
     activeBalls.push({
       mesh: ball,
@@ -232,30 +237,36 @@ export const initBuzzerBeaterModule = (uiManager) => {
     })
   }
 
-  const checkScore = (ball) => {
-    if (ball.scored) return
-    const rimWorld = new THREE.Vector3().copy(rimCenter)
-    hoopGroup.localToWorld(rimWorld)
+  const getRimWorldPos = () => {
+    const p = rimLocalCenter.clone()
+    hoopGroup.localToWorld(p)
+    return p
+  }
 
+  const checkScore = (ball) => {
+    if (ball.scored || !hoopGroup) return
+    const rimWorld = getRimWorldPos()
     const bp = ball.mesh.position
+
     const dx = bp.x - rimWorld.x
     const dz = bp.z - rimWorld.z
     const hDist = Math.sqrt(dx * dx + dz * dz)
 
-    if (hDist < rimRadius * 1.3 &&
-        Math.abs(bp.y - rimWorld.y) < BALL_RADIUS * 2.5 &&
+    // Ball passes through rim (within radius, near rim height, moving down)
+    if (hDist < rimRadius * 1.5 &&
+        Math.abs(bp.y - rimWorld.y) < BALL_RADIUS * 3 &&
         ball.velocity.y < 0) {
       ball.scored = true
       score++
       updateHUD()
       uiManager.showInstruction('SCORE! +1')
-      setTimeout(() => { if (gameActive) uiManager.showInstruction('Swipe up to shoot!') }, 700)
+      setTimeout(() => { if (gameActive) uiManager.showInstruction('Swipe up to shoot!') }, 600)
     }
   }
 
-  const checkBackboardCollision = (ball) => {
-    if (!backboardBox) return
-    const worldBox = backboardBox.clone().applyMatrix4(hoopGroup.matrixWorld)
+  const checkBackboard = (ball) => {
+    if (!backboardLocalBox || !hoopGroup) return
+    const worldBox = backboardLocalBox.clone().applyMatrix4(hoopGroup.matrixWorld)
     const bp = ball.mesh.position
     const closest = new THREE.Vector3()
     worldBox.clampPoint(bp, closest)
@@ -264,25 +275,27 @@ export const initBuzzerBeaterModule = (uiManager) => {
     if (dist < BALL_RADIUS) {
       const normal = new THREE.Vector3().subVectors(bp, closest).normalize()
       const dot = ball.velocity.dot(normal)
-      ball.velocity.addScaledVector(normal, -2 * dot)
-      ball.velocity.multiplyScalar(0.55)
-      ball.bounces++
-      bp.addScaledVector(normal, BALL_RADIUS - dist + 0.01)
+      if (dot < 0) {
+        ball.velocity.addScaledVector(normal, -2 * dot)
+        ball.velocity.multiplyScalar(0.5)
+        ball.bounces++
+        bp.addScaledVector(normal, BALL_RADIUS - dist + 0.05)
+      }
     }
   }
 
-  const checkRimCollision = (ball) => {
-    const rimWorld = new THREE.Vector3().copy(rimCenter)
-    hoopGroup.localToWorld(rimWorld)
-
+  const checkRim = (ball) => {
+    if (!hoopGroup) return
+    const rimWorld = getRimWorldPos()
     const bp = ball.mesh.position
+
     const toCenter = new THREE.Vector2(bp.x - rimWorld.x, bp.z - rimWorld.z)
     const distFromAxis = toCenter.length()
-    const rimTube = 0.03 * UNITS_PER_METER
+    const rimTube = 0.04 * UNITS_PER_METER
     const ringDist = Math.abs(distFromAxis - rimRadius)
 
     if (ringDist < BALL_RADIUS + rimTube &&
-        Math.abs(bp.y - rimWorld.y) < BALL_RADIUS + rimTube) {
+        Math.abs(bp.y - rimWorld.y) < BALL_RADIUS + rimTube * 2) {
       const angle = Math.atan2(toCenter.y, toCenter.x)
       const closestOnRing = new THREE.Vector3(
         rimWorld.x + Math.cos(angle) * rimRadius,
@@ -293,7 +306,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
       const dot = ball.velocity.dot(normal)
       if (dot < 0) {
         ball.velocity.addScaledVector(normal, -2 * dot)
-        ball.velocity.multiplyScalar(0.5)
+        ball.velocity.multiplyScalar(0.45)
         ball.bounces++
       }
     }
@@ -303,26 +316,31 @@ export const initBuzzerBeaterModule = (uiManager) => {
     for (let i = activeBalls.length - 1; i >= 0; i--) {
       const ball = activeBalls[i]
       ball.age += delta
+
       ball.velocity.y += GRAVITY * delta
       ball.mesh.position.addScaledVector(ball.velocity, delta)
-      ball.mesh.rotation.x += delta * 5
-      ball.mesh.rotation.z += delta * 3
+
+      // Spin
+      ball.mesh.rotation.x += delta * 6
+      ball.mesh.rotation.z += delta * 4
 
       if (hoopGroup) {
-        checkBackboardCollision(ball)
-        checkRimCollision(ball)
+        checkBackboard(ball)
+        checkRim(ball)
         checkScore(ball)
       }
 
+      // Floor bounce
       if (groundPlane && ball.mesh.position.y < groundPlane.position.y + BALL_RADIUS) {
         ball.mesh.position.y = groundPlane.position.y + BALL_RADIUS
-        ball.velocity.y = Math.abs(ball.velocity.y) * 0.35
-        ball.velocity.x *= 0.7
-        ball.velocity.z *= 0.7
+        ball.velocity.y = Math.abs(ball.velocity.y) * 0.3
+        ball.velocity.x *= 0.6
+        ball.velocity.z *= 0.6
         ball.bounces++
       }
 
-      if (ball.age > 5 || ball.bounces > 6) {
+      // Cleanup
+      if (ball.age > 4 || ball.bounces > 5) {
         xrScene.remove(ball.mesh)
         activeBalls.splice(i, 1)
       }
@@ -331,14 +349,20 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
   const updateHoopSlide = (delta) => {
     if (!hoopGroup || !hoopPlaced || !gameActive) return
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(hoopGroup.quaternion)
-    hoopGroup.position.addScaledVector(right, hoopSlideDir * HOOP_SLIDE_SPEED * delta)
 
-    const offset = new THREE.Vector3().subVectors(hoopGroup.position, hoopCenter)
-    offset.y = 0
-    if (offset.length() > HOOP_SLIDE_RANGE) hoopSlideDir *= -1
+    hoopSlideOffset += hoopSlideDir * HOOP_SLIDE_SPEED * delta
+
+    if (Math.abs(hoopSlideOffset) > HOOP_SLIDE_RANGE) {
+      hoopSlideDir *= -1
+      hoopSlideOffset = Math.sign(hoopSlideOffset) * HOOP_SLIDE_RANGE
+    }
+
+    // Slide along the hoop's local X axis (left-right from user's perspective)
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(hoopGroup.quaternion)
+    hoopGroup.position.copy(hoopAnchorPos).addScaledVector(right, hoopSlideOffset)
   }
 
+  // Touch handlers
   const handleTouchStart = (e) => {
     if (!hoopPlaced) {
       if (!xrCamera || !groundPlane) return
@@ -363,8 +387,9 @@ export const initBuzzerBeaterModule = (uiManager) => {
     const dy = swipeStart.y - endY
     swipeStart = null
 
-    if (dy > 40 && dt < 0.8) {
-      const speed = Math.min(dy / (dt * 500), 3.0)
+    // Upward swipe with enough speed
+    if (dy > 30 && dt < 1.0) {
+      const speed = Math.min(Math.max(dy / (dt * 400), 0.5), 2.5)
       shootBall(speed)
     }
   }
@@ -381,11 +406,11 @@ export const initBuzzerBeaterModule = (uiManager) => {
       canvas.addEventListener('touchstart', handleTouchStart)
       canvas.addEventListener('touchend', handleTouchEnd)
 
-      uiManager.showInstruction('Tap the floor to place the basketball hoop!')
+      uiManager.showInstruction('Tap the floor to place the hoop!')
     },
 
     onUpdate: () => {
-      const delta = clock.getDelta()
+      const delta = timer.getDelta()
 
       if (!hoopPlaced && reticle && xrCamera && groundPlane) {
         raycaster.setFromCamera(screenCenter, xrCamera)
