@@ -178,6 +178,20 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       }
     },
 
+    onStop: () => {
+      const canvas = document.getElementById('camerafeed')
+      if (canvas) {
+        canvas.removeEventListener('touchstart', handlePlacementTap)
+      }
+      if (xrScene) {
+        if (mascotModel) xrScene.remove(mascotModel)
+        if (reticle) xrScene.remove(reticle)
+        if (groundPlane) xrScene.remove(groundPlane)
+        const lights = xrScene.children.filter(child => child.isLight)
+        lights.forEach(light => xrScene.remove(light))
+      }
+    },
+
     listeners: [
       {
         event: 'reality.imagefound',

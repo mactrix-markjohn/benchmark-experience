@@ -116,6 +116,14 @@ export const initFaceMaskModule = (uiManager) => {
       }
     },
 
+    onStop: () => {
+      if (xrScene) {
+        if (faceAnchorGroup) xrScene.remove(faceAnchorGroup)
+        const lights = xrScene.children.filter(child => child.isLight)
+        lights.forEach(light => xrScene.remove(light))
+      }
+    },
+
     listeners: [
       {
         event: 'facecontroller.facefound',

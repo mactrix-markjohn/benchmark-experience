@@ -5,8 +5,11 @@ export class UIManager {
     this.instruction = document.getElementById('instruction')
     this.scorePill = document.getElementById('score-pill')
 
-    this.onboardingScreen = document.getElementById('onboarding-screen')
-    this.onboardingBtn = document.getElementById('onboarding-btn')
+    this.menuScreen = document.getElementById('menu-screen')
+    this.mascotCard = document.getElementById('mascot-card')
+    this.maskCard = document.getElementById('mask-card')
+    this.buzzerCard = document.getElementById('buzzer-card')
+    this.backBtn = document.getElementById('back-btn')
 
     this.foundOverlay = document.getElementById('found-overlay')
     this.foundPoints = document.getElementById('found-points')
@@ -26,15 +29,6 @@ export class UIManager {
   }
 
   initEventListeners() {
-    if (this.onboardingBtn) {
-      this.onboardingBtn.addEventListener('click', () => {
-        if (this.onboardingScreen) {
-          this.onboardingScreen.style.opacity = '0'
-          setTimeout(() => { this.onboardingScreen.style.display = 'none' }, 300)
-        }
-      })
-    }
-
     if (this.shutterBtn) {
       this.shutterBtn.addEventListener('click', () => this.triggerCapture())
     }
@@ -43,9 +37,55 @@ export class UIManager {
       this.closePreviewBtn.addEventListener('click', () => {
         this.previewModal.classList.remove('active')
         this.shutterContainer.style.display = 'flex'
-        this.showInstruction('Move around the mascot and take another shot!')
+        this.showInstruction('Tap the shutter to take a photo!')
       })
     }
+  }
+
+  showMenu(unlockedType) {
+    if (!this.menuScreen) return
+    this.resetUI()
+    this.menuScreen.style.display = 'flex'
+
+    if (unlockedType === 'atomic') {
+      if (this.mascotCard) this.mascotCard.style.display = 'block'
+      if (this.maskCard) this.maskCard.style.display = 'block'
+      if (this.buzzerCard) this.buzzerCard.style.display = 'none'
+    } else if (unlockedType === 'power') {
+      if (this.mascotCard) this.mascotCard.style.display = 'none'
+      if (this.maskCard) this.maskCard.style.display = 'none'
+      if (this.buzzerCard) this.buzzerCard.style.display = 'block'
+    }
+  }
+
+  hideMenu() {
+    if (this.menuScreen) this.menuScreen.style.display = 'none'
+  }
+
+  showBackButton(onBack) {
+    if (!this.backBtn) return
+    this.backBtn.style.display = 'block'
+    
+    // Replace listener cleanly
+    const newBtn = this.backBtn.cloneNode(true)
+    this.backBtn.parentNode.replaceChild(newBtn, this.backBtn)
+    this.backBtn = newBtn
+    
+    this.backBtn.addEventListener('click', () => {
+      if (onBack) onBack()
+    })
+  }
+
+  hideBackButton() {
+    if (this.backBtn) this.backBtn.style.display = 'none'
+  }
+
+  resetUI() {
+    this.showInstruction('')
+    if (this.shutterContainer) this.shutterContainer.style.display = 'none'
+    if (this.scorePill) this.scorePill.style.display = 'none'
+    if (this.foundOverlay) this.foundOverlay.classList.remove('active')
+    if (this.previewModal) this.previewModal.classList.remove('active')
   }
 
   showInstruction(text) {

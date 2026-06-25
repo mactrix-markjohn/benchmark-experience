@@ -75,6 +75,8 @@
     .menu-card.mascot:active { border-color: var(--cyan); }
     .menu-card.mask { border-color: rgba(138,43,226,0.2); }
     .menu-card.mask:active { border-color: var(--purple); }
+    .menu-card.buzzer { border-color: rgba(255,102,0,0.2); }
+    .menu-card.buzzer:active { border-color: #ff6600; }
 
     /* --- Back button --- */
     #back-btn {
@@ -203,7 +205,7 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-G1wXxjlY.js"></script>
+  <script type="module" crossorigin src="./assets/index-DKQcAOM7.js"></script>
 </head>
 <body>
   <div id="debug-log-panel" style="position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.85); color: #ff3333; font-family: monospace; font-size: 10px; padding: 10px; border-radius: 8px; z-index: 99999; max-height: 200px; overflow-y: auto; word-break: break-all; border: 1px solid red;">
@@ -269,19 +271,24 @@
   <canvas id="camerafeed"></canvas>
 
   <!-- Menu Screen (shown before camera starts) -->
-  <div id="menu-screen">
+  <div id="menu-screen" style="display: none;">
     <div class="menu-logo">BENCHMARK</div>
     <div class="menu-sub">Choose your experience</div>
     <div class="menu-cards">
-      <div class="menu-card mascot" id="mascot-card">
+      <div class="menu-card mascot" id="mascot-card" style="display: none;">
         <div class="menu-card-icon">&#x1f680;</div>
         <div class="menu-card-title">Find the Mascot</div>
         <div class="menu-card-desc">Scan a target, place the mascot on the floor, and snap a photo!</div>
       </div>
-      <div class="menu-card mask" id="mask-card">
+      <div class="menu-card mask" id="mask-card" style="display: none;">
         <div class="menu-card-icon">&#x1f3ad;</div>
         <div class="menu-card-title">Try the Mask</div>
         <div class="menu-card-desc">Use the front camera to wear the mascot mask on your face!</div>
+      </div>
+      <div class="menu-card buzzer" id="buzzer-card" style="display: none;">
+        <div class="menu-card-icon">🏀</div>
+        <div class="menu-card-title">Buzzer Beater</div>
+        <div class="menu-card-desc">Shoot basketballs into a virtual hoop on the floor!</div>
       </div>
     </div>
   </div>
