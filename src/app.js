@@ -133,6 +133,10 @@ const onxrloaded = () => {
 
     XR8.XrController.configure({
       disableWorldTracking: false,
+      imageTargetData: [
+        imageTargetAtomic,
+        imageTargetBackPower,
+      ],
     })
 
     XR8.addCameraPipelineModules([
@@ -231,6 +235,8 @@ const onxrloaded = () => {
     uiManager.showBackButton(() => {
       window.location.href = window.location.pathname
     })
+
+    uiManager.showInstruction('Loading face mask assets...')
 
     XR8.run({
       canvas: document.getElementById('camerafeed'),

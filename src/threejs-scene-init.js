@@ -64,6 +64,7 @@ export const initScenePipelineModule = (gameState, uiManager) => {
     groundPlane = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}))
     scene.add(groundPlane)
 
+    uiManager.showInstruction('Loading mascot assets...')
     new GLTFLoader().load('assets/AstronautThumbUp.glb', (gltf) => {
       mascotModel = gltf.scene
       mascotModel.updateMatrixWorld(true)
@@ -91,8 +92,13 @@ export const initScenePipelineModule = (gameState, uiManager) => {
       if (pendingActivation) {
         pendingActivation = false
         activateExperience()
+      } else {
+        uiManager.showInstruction('Scan the atomic target to unlock!')
       }
-    }, undefined, (err) => console.error('Model load error:', err))
+    }, undefined, (err) => {
+      console.error('Model load error:', err)
+      uiManager.showInstruction('Error loading mascot assets.')
+    })
 
     camera.position.set(0, 2, 3)
   }

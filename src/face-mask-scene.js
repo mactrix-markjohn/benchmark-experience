@@ -30,6 +30,14 @@ export const initFaceMaskModule = (uiManager) => {
     scene.add(new THREE.AmbientLight(0xffffff, 0.8))
 
     const loader = new GLTFLoader()
+    let maskLoaded = false
+    let hiderLoaded = false
+
+    const checkAllLoaded = () => {
+      if (maskLoaded && hiderLoaded) {
+        uiManager.showInstruction('Point the camera at your face!')
+      }
+    }
 
     // 1. Load the Trapper Mask model
     loader.load('assets/trappermask.glb', (gltf) => {
@@ -60,9 +68,12 @@ export const initFaceMaskModule = (uiManager) => {
       const box = new THREE.Box3().setFromObject(maskModel)
       const size = box.getSize(new THREE.Vector3())
       console.log('[FaceMask] Mask model loaded, bounds:', size)
+
+      maskLoaded = true
+      checkAllLoaded()
     }, undefined, (err) => {
       console.error('Mask load error:', err)
-      alert('Failed to load face mask model: ' + (err.message || err))
+      uiManager.showInstruction('Error loading face mask.')
     })
 
     // 2. Load the Face Hider (occluder) model
@@ -89,8 +100,13 @@ export const initFaceMaskModule = (uiManager) => {
 
       faceAnchorGroup.add(faceHiderModel)
       console.log('[FaceMask] Face hider model loaded and configured as occluder')
+
+      hiderLoaded = true
+      checkAllLoaded()
     }, undefined, (err) => {
       console.error('Face hider load error:', err)
+      hiderLoaded = true
+      checkAllLoaded()
     })
   }
 
