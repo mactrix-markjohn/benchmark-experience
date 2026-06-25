@@ -36,7 +36,7 @@ export const initFaceMaskModule = (uiManager) => {
       maskModel = gltf.scene
 
       // Set local offsets relative to faceAnchorGroup
-      maskModel.position.set(0.08976, -0.8917, -0.7399)
+      maskModel.position.set(-0.08976, -0.8917, 0.7399)
       maskModel.quaternion.set(0, 0.737277, 0, -0.67559)
       maskModel.scale.set(1.9, 1.9, 1.9)
 
