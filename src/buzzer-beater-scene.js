@@ -1,13 +1,13 @@
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 
-const UNITS_PER_METER = 1.0 / 0.21
-const GRAVITY = -9.8 * UNITS_PER_METER
-const BALL_RADIUS = 0.15 * UNITS_PER_METER
+const UNITS_PER_METER = 1.0
+const GRAVITY = -9.8
+const BALL_RADIUS = 0.12 // 12cm radius
 const GAME_DURATION = 20
-const HOOP_SLIDE_SPEED = 1.2
-const HOOP_SLIDE_RANGE = 1.5 * UNITS_PER_METER
-const SHOOT_POWER = 12.0 * UNITS_PER_METER
+const HOOP_SLIDE_SPEED = 1.0
+const HOOP_SLIDE_RANGE = 1.5
+const SHOOT_POWER = 5.0
 
 export const initBuzzerBeaterModule = (uiManager) => {
   let xrScene = null
@@ -64,19 +64,12 @@ export const initBuzzerBeaterModule = (uiManager) => {
     reticle.visible = false
     scene.add(reticle)
 
-    // Ground
-    const groundGeo = new THREE.PlaneGeometry(500, 500)
+    // Ground (used for bouncing after hoop is placed)
+    const groundGeo = new THREE.PlaneGeometry(100, 100)
     groundGeo.rotateX(-Math.PI / 2)
-    groundPlane = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}))
+    groundPlane = new THREE.Mesh(groundGeo, new THREE.ShadowMaterial({ opacity: 0.5 }))
+    groundPlane.receiveShadow = true
     scene.add(groundPlane)
-
-    setTimeout(() => {
-      if (xrCamera && groundPlane) {
-        const cp = new THREE.Vector3()
-        xrCamera.getWorldPosition(cp)
-        groundPlane.position.y = cp.y - (1.3 * UNITS_PER_METER)
-      }
-    }, 500)
 
     const loader = new GLTFLoader()
 
@@ -86,8 +79,8 @@ export const initBuzzerBeaterModule = (uiManager) => {
       const box = new THREE.Box3().setFromObject(hoopModel)
       const size = box.getSize(new THREE.Vector3())
 
-      // Scale hoop to ~1.5m tall for AR
-      hoopScaleFactor = (1.5 * UNITS_PER_METER) / size.y
+      // Scale hoop to ~2.5m tall for AR (closer to real life)
+      hoopScaleFactor = 2.5 / size.y
       hoopModel.scale.set(hoopScaleFactor, hoopScaleFactor, hoopScaleFactor)
 
       hoopModel.updateMatrixWorld(true)
@@ -123,11 +116,17 @@ export const initBuzzerBeaterModule = (uiManager) => {
     hoopGroup.position.copy(point)
     hoopModel.updateMatrixWorld(true)
     const box = new THREE.Box3().setFromObject(hoopModel)
+    // Align bottom of the hoop to the hit point
     hoopGroup.position.y -= (box.min.y - point.y)
 
     hoopAnchorPos.copy(hoopGroup.position)
 
-    // Face camera
+    // Set ground plane exactly at hit point level
+    if (groundPlane) {
+      groundPlane.position.y = point.y
+    }
+
+    // Face camera (only Y axis)
     const cp = new THREE.Vector3()
     xrCamera.getWorldPosition(cp)
     hoopGroup.lookAt(new THREE.Vector3(cp.x, hoopGroup.position.y, cp.z))
@@ -203,30 +202,26 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
     const camPos = new THREE.Vector3()
     const camDir = new THREE.Vector3()
-    const camRight = new THREE.Vector3()
-    const camUp = new THREE.Vector3()
+    const camUp = new THREE.Vector3(0, 1, 0)
     xrCamera.getWorldPosition(camPos)
     xrCamera.getWorldDirection(camDir)
 
-    // Get camera's local axes
-    camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize()
-    camUp.crossVectors(camRight, camDir).normalize()
-
-    // Start ball in front of camera, offset down so it's visible at bottom of screen
+    // Start ball just below and in front of the camera so it's visible during throw
     ball.position.copy(camPos)
-    ball.position.addScaledVector(camDir, 1.5)
-    ball.position.addScaledVector(camUp, -0.8)
+    ball.position.addScaledVector(camDir, 0.4)
+    ball.position.addScaledVector(camUp, -0.3)
 
-    // Launch direction: forward and up (like throwing a basketball)
-    const launchDir = new THREE.Vector3()
-    launchDir.copy(camDir)
-    launchDir.y = 0
-    launchDir.normalize()
+    // Launch direction: flatten the camera pitch slightly to throw forward, and add an upward arc
+    const launchDir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize()
 
-    const power = swipeSpeed * SHOOT_POWER
-    const vx = launchDir.x * power * 0.7
-    const vz = launchDir.z * power * 0.7
-    const vy = power * 0.6 // Upward arc
+    // speed limit
+    const speed = Math.min(Math.max(swipeSpeed, 0.5), 2.5)
+    
+    // velocity
+    const vx = launchDir.x * speed * SHOOT_POWER
+    const vz = launchDir.z * speed * SHOOT_POWER
+    // Add strong upward arc based on swipe
+    const vy = speed * SHOOT_POWER * 0.8
 
     activeBalls.push({
       mesh: ball,
@@ -365,15 +360,15 @@ export const initBuzzerBeaterModule = (uiManager) => {
   // Touch handlers
   const handleTouchStart = (e) => {
     if (!hoopPlaced) {
-      if (!xrCamera || !groundPlane) return
-      const t = e.touches[0]
-      const ndc = new THREE.Vector2(
-        (t.clientX / window.innerWidth) * 2 - 1,
-        -(t.clientY / window.innerHeight) * 2 + 1
-      )
-      raycaster.setFromCamera(ndc, xrCamera)
-      const hits = raycaster.intersectObject(groundPlane)
-      if (hits.length > 0) placeHoop(hits[0].point)
+      if (e.touches.length > 0) {
+        // Use 8th Wall hit testing for AR surface placement
+        const t = e.touches[0]
+        const hits = XR8.XrController.hitTest(t.clientX, t.clientY, ['FEATURE_POINT', 'ESTIMATED_SURFACE'])
+        if (hits && hits.length > 0) {
+          const hit = hits[0]
+          placeHoop(new THREE.Vector3(hit.position.x, hit.position.y, hit.position.z))
+        }
+      }
       return
     }
     if (!gameActive) return
@@ -412,13 +407,15 @@ export const initBuzzerBeaterModule = (uiManager) => {
     onUpdate: () => {
       const delta = timer.getDelta()
 
-      if (!hoopPlaced && reticle && xrCamera && groundPlane) {
-        raycaster.setFromCamera(screenCenter, xrCamera)
-        const hits = raycaster.intersectObject(groundPlane)
-        if (hits.length > 0) {
-          reticle.position.copy(hits[0].point)
-          reticle.position.y += 0.02
+      if (!hoopPlaced && reticle && xrCamera) {
+        // Update reticle using center-of-screen hit test
+        const hits = XR8.XrController.hitTest(window.innerWidth / 2, window.innerHeight / 2, ['FEATURE_POINT', 'ESTIMATED_SURFACE'])
+        if (hits && hits.length > 0) {
+          const hit = hits[0]
+          reticle.position.set(hit.position.x, hit.position.y + 0.02, hit.position.z)
           reticle.visible = true
+        } else {
+          reticle.visible = false
         }
         reticle.rotation.y += 0.015
       }
