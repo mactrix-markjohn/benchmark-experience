@@ -37,7 +37,7 @@ export const initFaceMaskModule = (uiManager) => {
 
       // Set local offsets relative to faceAnchorGroup
       maskModel.position.set(0.08976, -0.8917, -0.7399)
-      maskModel.quaternion.set(0, 0.67559, 0, 0.73728)
+      maskModel.quaternion.set(0, 0.737277, 0, -0.67559)
       maskModel.scale.set(1.9, 1.9, 1.9)
 
       maskModel.traverse((n) => {
@@ -71,7 +71,7 @@ export const initFaceMaskModule = (uiManager) => {
 
       // Set local offsets relative to faceAnchorGroup
       faceHiderModel.position.set(0, 0, 0)
-      faceHiderModel.quaternion.set(0, -1, 0, 0)
+      faceHiderModel.quaternion.set(0, 0, 0, 1)
       faceHiderModel.scale.set(0.96, 0.96, 0.96)
 
       faceHiderModel.traverse((n) => {
