@@ -64,12 +64,21 @@ export const initBuzzerBeaterModule = (uiManager) => {
     reticle.visible = false
     scene.add(reticle)
 
-    // Ground (used for bouncing after hoop is placed)
+    // Ground (used for placing the hoop and bouncing)
     const groundGeo = new THREE.PlaneGeometry(100, 100)
     groundGeo.rotateX(-Math.PI / 2)
     groundPlane = new THREE.Mesh(groundGeo, new THREE.ShadowMaterial({ opacity: 0.5 }))
     groundPlane.receiveShadow = true
     scene.add(groundPlane)
+
+    // Position ground plane 1.5 meters below the camera (average chest/phone height)
+    setTimeout(() => {
+      if (xrCamera && groundPlane) {
+        const cp = new THREE.Vector3()
+        xrCamera.getWorldPosition(cp)
+        groundPlane.position.y = cp.y - 1.5
+      }
+    }, 500)
 
     const loader = new GLTFLoader()
 
@@ -120,11 +129,6 @@ export const initBuzzerBeaterModule = (uiManager) => {
     hoopGroup.position.y -= (box.min.y - point.y)
 
     hoopAnchorPos.copy(hoopGroup.position)
-
-    // Set ground plane exactly at hit point level
-    if (groundPlane) {
-      groundPlane.position.y = point.y
-    }
 
     // Face camera (only Y axis)
     const cp = new THREE.Vector3()
@@ -360,15 +364,15 @@ export const initBuzzerBeaterModule = (uiManager) => {
   // Touch handlers
   const handleTouchStart = (e) => {
     if (!hoopPlaced) {
-      if (e.touches.length > 0) {
-        // Use 8th Wall hit testing for AR surface placement
-        const t = e.touches[0]
-        const hits = XR8.XrController.hitTest(t.clientX, t.clientY, ['FEATURE_POINT', 'ESTIMATED_SURFACE'])
-        if (hits && hits.length > 0) {
-          const hit = hits[0]
-          placeHoop(new THREE.Vector3(hit.position.x, hit.position.y, hit.position.z))
-        }
-      }
+      if (!xrCamera || !groundPlane) return
+      const t = e.touches[0]
+      const ndc = new THREE.Vector2(
+        (t.clientX / window.innerWidth) * 2 - 1,
+        -(t.clientY / window.innerHeight) * 2 + 1
+      )
+      raycaster.setFromCamera(ndc, xrCamera)
+      const hits = raycaster.intersectObject(groundPlane)
+      if (hits.length > 0) placeHoop(hits[0].point)
       return
     }
     if (!gameActive) return
@@ -407,12 +411,12 @@ export const initBuzzerBeaterModule = (uiManager) => {
     onUpdate: () => {
       const delta = timer.getDelta()
 
-      if (!hoopPlaced && reticle && xrCamera) {
-        // Update reticle using center-of-screen hit test
-        const hits = XR8.XrController.hitTest(window.innerWidth / 2, window.innerHeight / 2, ['FEATURE_POINT', 'ESTIMATED_SURFACE'])
-        if (hits && hits.length > 0) {
-          const hit = hits[0]
-          reticle.position.set(hit.position.x, hit.position.y + 0.02, hit.position.z)
+      if (!hoopPlaced && reticle && xrCamera && groundPlane) {
+        raycaster.setFromCamera(screenCenter, xrCamera)
+        const hits = raycaster.intersectObject(groundPlane)
+        if (hits.length > 0) {
+          reticle.position.copy(hits[0].point)
+          reticle.position.y += 0.02
           reticle.visible = true
         } else {
           reticle.visible = false
