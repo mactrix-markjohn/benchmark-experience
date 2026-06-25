@@ -15,9 +15,7 @@ const onxrloaded = () => {
   const gameState = new GameState()
   const uiManager = new UIManager(gameState)
 
-  let currentMode = 'scanning' // 'scanning', 'mascot', 'mask', 'buzzer'
-
-  // Global error handler to catch and display mobile safari runtime errors
+  // Global error handler to catch and display mobile Safari runtime errors
   window.onerror = (message, source, lineno, colno, error) => {
     const errorStr = `${message} at ${source}:${lineno}:${colno}`
     alert(errorStr)
@@ -31,196 +29,217 @@ const onxrloaded = () => {
     uiManager.showInstruction(errorStr)
   })
 
-  // Initialize custom scanning pipeline module
-  const scanningModule = {
-    name: 'scanning-target-module',
-    listeners: [
-      {
-        event: 'reality.imagefound',
-        process: (event) => {
-          if (currentMode !== 'scanning') return
-          const {name} = event.detail || event
-          console.log('[Scanning] Target found:', name)
-          
-          if (name === 'image-target-atomic') {
-            uiManager.showMenu('atomic')
-            uiManager.showInstruction('Atomic target detected! Select Mascot or Face Mask.')
-          } else if (name === 'image-target-back-power') {
-            uiManager.showMenu('power')
-            uiManager.showInstruction('Power target detected! Select Buzzer Beater.')
+  // Parse search query parameter
+  const urlParams = new URLSearchParams(window.location.search)
+  const experience = urlParams.get('experience') // null, 'mascot', 'mask', 'buzzer'
+
+  if (!experience) {
+    // ----------------------------------------------------
+    // SCANNING MODE (Default Entry)
+    // ----------------------------------------------------
+    console.log('[App] Starting in Scanning Mode')
+
+    const scanningModule = {
+      name: 'scanning-target-module',
+      listeners: [
+        {
+          event: 'reality.imagefound',
+          process: (event) => {
+            const {name} = event.detail || event
+            console.log('[Scanning] Target found:', name)
+            
+            if (name === 'image-target-atomic') {
+              uiManager.showMenu('atomic')
+              uiManager.showInstruction('Atomic target detected! Select Mascot or Face Mask.')
+            } else if (name === 'image-target-back-power') {
+              uiManager.showMenu('power')
+              uiManager.showInstruction('Power target detected! Select Buzzer Beater.')
+            }
           }
         }
-      }
-    ]
-  }
+      ]
+    }
 
-  const mascotModule = initScenePipelineModule(gameState, uiManager)
-  const maskModule = initFaceMaskModule(uiManager)
-  const buzzerModule = initBuzzerBeaterModule(uiManager)
-
-  // Configure XrController for scanning session upfront
-  XR8.XrController.configure({
-    disableWorldTracking: false,
-    imageTargetData: [
-      imageTargetAtomic,
-      imageTargetBackPower,
-    ],
-  })
-
-  // Start initial scanning pipeline (BACK camera)
-  XR8.addCameraPipelineModules([
-    XR8.GlTextureRenderer.pipelineModule(),
-    XR8.Threejs.pipelineModule(),
-    XR8.XrController.pipelineModule(),
-    LandingPage.pipelineModule(),
-    XRExtras.FullWindowCanvas.pipelineModule(),
-    XRExtras.Loading.pipelineModule(),
-    XRExtras.RuntimeError.pipelineModule(),
-    scanningModule,
-  ])
-
-  // Wire up Card Clicks
-  const mascotCard = document.getElementById('mascot-card')
-  if (mascotCard) {
-    mascotCard.addEventListener('click', () => {
-      if (currentMode === 'scanning') startMascotMode()
+    // Configure SLAM with target JSON data upfront
+    XR8.XrController.configure({
+      disableWorldTracking: false,
+      imageTargetData: [
+        imageTargetAtomic,
+        imageTargetBackPower,
+      ],
     })
-  }
 
-  const maskCard = document.getElementById('mask-card')
-  if (maskCard) {
-    maskCard.addEventListener('click', () => {
-      if (currentMode === 'scanning') startFaceTracking()
+    // Register Scanning Modules
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      XR8.XrController.pipelineModule(),
+      LandingPage.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      scanningModule,
+    ])
+
+    // Wire up Menu Choices to reload page with experience parameter
+    const mascotCard = document.getElementById('mascot-card')
+    if (mascotCard) {
+      mascotCard.addEventListener('click', () => {
+        window.location.search = '?experience=mascot'
+      })
+    }
+
+    const maskCard = document.getElementById('mask-card')
+    if (maskCard) {
+      maskCard.addEventListener('click', () => {
+        window.location.search = '?experience=mask'
+      })
+    }
+
+    const buzzerCard = document.getElementById('buzzer-card')
+    if (buzzerCard) {
+      buzzerCard.addEventListener('click', () => {
+        window.location.search = '?experience=buzzer'
+      })
+    }
+
+    // Menu "Scan Another Target" close button
+    const menuBackBtn = document.getElementById('menu-back-btn')
+    if (menuBackBtn) {
+      menuBackBtn.addEventListener('click', () => {
+        uiManager.hideMenu()
+        uiManager.showInstruction('Scan an Image Target to Unlock!')
+      })
+    }
+
+    // Initial instruction
+    uiManager.showInstruction('Scan an Image Target to Unlock!')
+
+    // Run BACK camera for scanning
+    XR8.run({
+      canvas: document.getElementById('camerafeed'),
+      cameraConfig: {
+        direction: XR8.XrConfig.camera().BACK
+      },
+      allowedDevices: XR8.XrConfig.device().ANY,
     })
-  }
 
-  const buzzerCard = document.getElementById('buzzer-card')
-  if (buzzerCard) {
-    buzzerCard.addEventListener('click', () => {
-      if (currentMode === 'scanning') startBuzzerBeater()
+  } else if (experience === 'mascot') {
+    // ----------------------------------------------------
+    // MASCOT MODE
+    // ----------------------------------------------------
+    console.log('[App] Starting in Mascot Mode')
+    const mascotModule = initScenePipelineModule(gameState, uiManager)
+
+    XR8.XrController.configure({
+      disableWorldTracking: false,
     })
-  }
 
-  const startMascotMode = () => {
-    currentMode = 'mascot'
-    uiManager.hideMenu()
-    
-    XR8.addCameraPipelineModules([mascotModule])
-    
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      XR8.XrController.pipelineModule(),
+      LandingPage.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      mascotModule,
+    ])
+
+    // Back button returns to scanner by reloading page with empty params
     uiManager.showBackButton(() => {
-      currentMode = 'scanning'
-      uiManager.hideBackButton()
-      uiManager.resetUI()
-      uiManager.showInstruction('Scan an Image Target to Unlock!')
-      XR8.removeCameraPipelineModule('scavenger-hunt-3d-renderer')
+      window.location.href = window.location.pathname
     })
-  }
 
-  const startBuzzerBeater = () => {
-    currentMode = 'buzzer'
-    uiManager.hideMenu()
-    
-    XR8.addCameraPipelineModules([buzzerModule])
-    
+    XR8.run({
+      canvas: document.getElementById('camerafeed'),
+      cameraConfig: {
+        direction: XR8.XrConfig.camera().BACK
+      },
+      allowedDevices: XR8.XrConfig.device().ANY,
+    })
+
+  } else if (experience === 'buzzer') {
+    // ----------------------------------------------------
+    // BUZZER BEATER MODE
+    // ----------------------------------------------------
+    console.log('[App] Starting in Buzzer Beater Mode')
+    const buzzerModule = initBuzzerBeaterModule(uiManager)
+
+    XR8.XrController.configure({
+      disableWorldTracking: false,
+    })
+
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      XR8.XrController.pipelineModule(),
+      LandingPage.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      buzzerModule,
+    ])
+
     uiManager.showBackButton(() => {
-      currentMode = 'scanning'
-      uiManager.hideBackButton()
-      uiManager.resetUI()
-      uiManager.showInstruction('Scan an Image Target to Unlock!')
-      XR8.removeCameraPipelineModule('buzzer-beater-renderer')
+      window.location.href = window.location.pathname
+    })
+
+    XR8.run({
+      canvas: document.getElementById('camerafeed'),
+      cameraConfig: {
+        direction: XR8.XrConfig.camera().BACK
+      },
+      allowedDevices: XR8.XrConfig.device().ANY,
+    })
+
+  } else if (experience === 'mask') {
+    // ----------------------------------------------------
+    // TRY THE MASK MODE (Face Tracking - FRONT camera only)
+    // ----------------------------------------------------
+    console.log('[App] Starting in Face Tracking Mode')
+    const maskModule = initFaceMaskModule(uiManager)
+
+    // Disable world tracking to prevent SLAM conflicts on the front camera
+    XR8.XrController.configure({
+      disableWorldTracking: true,
+    })
+
+    XR8.FaceController.configure({
+      meshGeometry: [
+        XR8.FaceController.MeshGeometry.FACE
+      ],
+      coordinates: {
+        mirroredDisplay: true,
+      },
+      maxDetections: 1,
+    })
+
+    // NO XrController is added here. This guarantees no SLAM conflicts
+    // and preserves correct face mirroring projection.
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      XR8.FaceController.pipelineModule(),
+      LandingPage.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      maskModule,
+    ])
+
+    uiManager.showBackButton(() => {
+      window.location.href = window.location.pathname
+    })
+
+    XR8.run({
+      canvas: document.getElementById('camerafeed'),
+      cameraConfig: {
+        direction: XR8.XrConfig.camera().FRONT
+      },
+      allowedDevices: XR8.XrConfig.device().ANY,
     })
   }
-
-  const startFaceTracking = () => {
-    currentMode = 'mask'
-    uiManager.hideMenu()
-    
-    XR8.stop()
-    
-    setTimeout(() => {
-      // Configure FaceController upfront
-      XR8.FaceController.configure({
-        meshGeometry: [
-          XR8.FaceController.MeshGeometry.FACE
-        ],
-        coordinates: {
-          mirroredDisplay: true,
-        },
-        maxDetections: 1,
-      })
-
-      // Swap SLAM/Scanning modules for Face Tracking modules
-      XR8.removeCameraPipelineModule('xrcontroller')
-      XR8.removeCameraPipelineModule('scanning-target-module')
-      
-      const faceController = XR8.FaceController.pipelineModule()
-      XR8.addCameraPipelineModules([
-        faceController,
-        maskModule
-      ])
-      
-      uiManager.showBackButton(() => goBackToScanning())
-      
-      XR8.run({
-        canvas: document.getElementById('camerafeed'),
-        cameraConfig: {
-          direction: XR8.XrConfig.camera().FRONT
-        },
-        allowedDevices: XR8.XrConfig.device().ANY,
-      })
-    }, 300)
-  }
-
-  const goBackToScanning = () => {
-    currentMode = 'scanning'
-    uiManager.hideBackButton()
-    uiManager.resetUI()
-    
-    XR8.stop()
-    
-    setTimeout(() => {
-      // Reconfigure XrController for SLAM/Image Targets
-      XR8.XrController.configure({
-        disableWorldTracking: false,
-        imageTargetData: [
-          imageTargetAtomic,
-          imageTargetBackPower,
-        ],
-      })
-
-      // Swap Face modules back for SLAM/Scanning modules
-      XR8.removeCameraPipelineModule('facecontroller')
-      XR8.removeCameraPipelineModule('face-mask-renderer')
-      
-      const xrController = XR8.XrController.pipelineModule()
-      XR8.addCameraPipelineModules([
-        xrController,
-        scanningModule
-      ])
-      
-      uiManager.showInstruction('Scan an Image Target to Unlock!')
-      
-      XR8.run({
-        canvas: document.getElementById('camerafeed'),
-        cameraConfig: {
-          direction: XR8.XrConfig.camera().BACK
-        },
-        allowedDevices: XR8.XrConfig.device().ANY,
-      })
-    }, 300)
-  }
-
-  // Initial instruction
-  uiManager.showInstruction('Scan an Image Target to Unlock!')
-
-  // Run with BACK camera first to support Target Scanning
-  XR8.run({
-    canvas: document.getElementById('camerafeed'),
-    cameraConfig: {
-      direction: XR8.XrConfig.camera().BACK
-    },
-    allowedDevices: XR8.XrConfig.device().ANY,
-  })
 }
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
