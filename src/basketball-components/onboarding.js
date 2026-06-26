@@ -11,7 +11,26 @@ const onboardingComponent = {
     const gameOverEl = document.getElementById('gameOver')
     const playAgain = document.getElementById('playAgain')
 
-    playAgain.addEventListener('touchend', () => {
+    const backBtn = document.getElementById('back-btn')
+
+    // Prevent touch and mouse events on overlays from propagating to the A-Frame canvas/global listeners.
+    // If they propagate, global handlers (like XR8 or A-Frame) call preventDefault(), which suppresses 'click' synthesis.
+    const preventPropagation = (e) => {
+      e.stopPropagation()
+    }
+
+    const uiElements = [introCard, gameOverEl, backBtn]
+    uiElements.forEach((el) => {
+      if (el) {
+        el.addEventListener('touchstart', preventPropagation, {passive: true})
+        el.addEventListener('touchmove', preventPropagation, {passive: true})
+        el.addEventListener('touchend', preventPropagation, {passive: true})
+        el.addEventListener('mousedown', preventPropagation)
+        el.addEventListener('mouseup', preventPropagation)
+      }
+    })
+
+    playAgain.addEventListener('click', () => {
       window.location.reload()
     })
 
@@ -67,7 +86,7 @@ const onboardingComponent = {
     }
 
     const handleBegin = () => {
-      beginBtn.removeEventListener('touchend', handleBegin)
+      beginBtn.removeEventListener('click', handleBegin)
       introCard.classList.add('fade-out')
 
       setTimeout(() => {
@@ -78,7 +97,7 @@ const onboardingComponent = {
       startCountdown()
     }
 
-    beginBtn.addEventListener('touchend', handleBegin)
+    beginBtn.addEventListener('click', handleBegin)
   },
 }
 export {onboardingComponent}
