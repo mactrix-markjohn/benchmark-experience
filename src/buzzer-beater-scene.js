@@ -380,22 +380,36 @@ export const initBuzzerBeaterModule = (uiManager) => {
     loader.setDRACOLoader(dracoLoader)
 
     // 1. Load Arcade Cabinet
-    loader.load('basketball-assets/models/arcade.glb', (gltf) => {
-      const cabinetModel = gltf.scene
-      cabinetModel.scale.setScalar(1.1)
-      cabinetModel.updateMatrixWorld(true)
-      gameRig.add(cabinetModel)
-      console.log('[Buzzer] Loaded arcade.glb')
-    })
+    loader.load('basketball-assets/models/arcade.glb', 
+      (gltf) => {
+        const cabinetModel = gltf.scene
+        cabinetModel.scale.setScalar(1.1)
+        cabinetModel.updateMatrixWorld(true)
+        gameRig.add(cabinetModel)
+        console.log('[Buzzer] Loaded arcade.glb')
+      },
+      undefined,
+      (err) => {
+        console.error('[Buzzer] Failed to load arcade.glb:', err)
+        alert('Error loading arcade.glb: ' + (err.message || err))
+      }
+    )
 
     // 2. Load Hoop visual Mesh
-    loader.load('basketball-assets/models/new-hoop.glb', (gltf) => {
-      const hoopModel = gltf.scene
-      hoopModel.scale.setScalar(1.1)
-      hoopModel.updateMatrixWorld(true)
-      gameRig.add(hoopModel)
-      console.log('[Buzzer] Loaded new-hoop.glb')
-    })
+    loader.load('basketball-assets/models/new-hoop.glb', 
+      (gltf) => {
+        const hoopModel = gltf.scene
+        hoopModel.scale.setScalar(1.1)
+        hoopModel.updateMatrixWorld(true)
+        gameRig.add(hoopModel)
+        console.log('[Buzzer] Loaded new-hoop.glb')
+      },
+      undefined,
+      (err) => {
+        console.error('[Buzzer] Failed to load new-hoop.glb:', err)
+        alert('Error loading new-hoop.glb: ' + (err.message || err))
+      }
+    )
 
     // 3. Load video texture meshes and add to gameRig
     const playTex = createVideoTexture('play-video')
@@ -458,33 +472,40 @@ export const initBuzzerBeaterModule = (uiManager) => {
     }
 
     // 4. Load Basketball Model
-    loader.load('basketball-assets/models/basketball.glb', (gltf) => {
-      ballTemplate = gltf.scene
-      ballTemplate.updateMatrixWorld(true)
+    loader.load('basketball-assets/models/basketball.glb', 
+      (gltf) => {
+        ballTemplate = gltf.scene
+        ballTemplate.updateMatrixWorld(true)
 
-      const box = new THREE.Box3().setFromObject(ballTemplate)
-      const size = box.getSize(new THREE.Vector3())
-      const maxDim = Math.max(size.x, size.y, size.z)
-      if (maxDim > 0) {
-        const scale = (BALL_RADIUS * 2) / maxDim
-        ballTemplate.scale.set(scale, scale, scale)
+        const box = new THREE.Box3().setFromObject(ballTemplate)
+        const size = box.getSize(new THREE.Vector3())
+        const maxDim = Math.max(size.x, size.y, size.z)
+        if (maxDim > 0) {
+          const scale = (BALL_RADIUS * 2) / maxDim
+          ballTemplate.scale.set(scale, scale, scale)
+        }
+        ballTemplate.traverse((child) => {
+          child.frustumCulled = false
+        })
+
+        readyBallAnchor = new THREE.Group()
+        readyBall = ballTemplate.clone()
+        readyBall.visible = true
+        readyBall.traverse((child) => {
+          child.frustumCulled = false
+        })
+        readyBallAnchor.add(readyBall)
+        xrCamera.add(readyBallAnchor) // ready ball attached to camera
+        updateReadyBallPose()
+
+        console.log('[Buzzer] Loaded basketball.glb')
+      },
+      undefined,
+      (err) => {
+        console.error('[Buzzer] Failed to load basketball.glb:', err)
+        alert('Error loading basketball.glb: ' + (err.message || err))
       }
-      ballTemplate.traverse((child) => {
-        child.frustumCulled = false
-      })
-
-      readyBallAnchor = new THREE.Group()
-      readyBall = ballTemplate.clone()
-      readyBall.visible = true
-      readyBall.traverse((child) => {
-        child.frustumCulled = false
-      })
-      readyBallAnchor.add(readyBall)
-      xrCamera.add(readyBallAnchor) // ready ball attached to camera
-      updateReadyBallPose()
-
-      console.log('[Buzzer] Loaded basketball.glb')
-    })
+    )
   }
 
   return {
