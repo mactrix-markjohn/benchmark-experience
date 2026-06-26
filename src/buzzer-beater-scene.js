@@ -2,8 +2,8 @@ import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js'
 
-const BALL_RADIUS = 0.185 * 0.58 // Match A-Frame sphere radius * visual scale (approx 0.11m)
-const GAME_DURATION = 60 // 60 seconds as requested to match classic basketball
+const BALL_RADIUS = 0.185 // Match A-Frame sphere radius (0.185m)
+const GAME_DURATION = 60 // 60 seconds as in classic basketball
 const GRAVITY = 9.8
 
 export const initBuzzerBeaterModule = (uiManager) => {
@@ -25,6 +25,11 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
   const timer = new THREE.Clock()
 
+  // Ready ball animation properties
+  let readyBallProgress = 1.0 // 1.0 means it is fully loaded in ready pose
+  const startLocalPos = new THREE.Vector3(0, -1.0, -0.5)
+  const endLocalPos = new THREE.Vector3(0, -0.35, -0.5)
+
   const createVideoTexture = (id) => {
     const video = document.getElementById(id)
     if (!video) return null
@@ -38,17 +43,21 @@ export const initBuzzerBeaterModule = (uiManager) => {
     return texture
   }
 
-  const getReadyBallLocalPosition = () => {
-    // Lock the ready ball at the bottom center of the phone screen
-    const distance = 0.5
-    const fovRad = THREE.MathUtils.degToRad(xrCamera?.fov || 60)
-    const halfHeight = Math.tan(fovRad * 0.5) * distance
-    return new THREE.Vector3(0, -halfHeight * 0.72, -distance)
-  }
-
-  const updateReadyBallPose = () => {
+  const updateReadyBallPose = (delta) => {
     if (!readyBallAnchor) return
-    readyBallAnchor.position.copy(getReadyBallLocalPosition())
+    
+    if (readyBallProgress < 1.0) {
+      readyBallProgress += delta / 1.0 // 1.0 second duration
+      if (readyBallProgress > 1.0) readyBallProgress = 1.0
+
+      // Easing: easeInOutQuad
+      const t = readyBallProgress
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+      readyBallAnchor.position.lerpVectors(startLocalPos, endLocalPos, ease)
+    } else {
+      readyBallAnchor.position.copy(endLocalPos)
+    }
+    
     readyBallAnchor.rotation.set(-0.15, 0, 0)
     readyBallAnchor.updateMatrixWorld(true)
   }
@@ -56,7 +65,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
   const updateHUD = () => {
     const t = document.getElementById('buzzer-timer')
     const s = document.getElementById('buzzer-score')
-    if (t) t.innerText = `${timeLeft}s`
+    if (t) t.innerText = `${timeLeft}`
     if (s) s.innerText = `${score}`
   }
 
@@ -67,9 +76,6 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
   const placeObjectInFrontOfCamera = () => {
     if (placed || !xrCamera || !gameRig) return
-
-    // Wait until the SLAM tracking initialized and moves camera from origin
-    if (xrCamera.position.lengthSq() < 0.0001) return
 
     placed = true
 
@@ -132,7 +138,8 @@ export const initBuzzerBeaterModule = (uiManager) => {
     if (readyBallAnchor) {
       readyBallAnchor.visible = true
       if (readyBall) readyBall.visible = true
-      updateReadyBallPose()
+      readyBallProgress = 1.0 // spawn ready
+      readyBallAnchor.position.copy(endLocalPos)
     }
 
     updateHUD()
@@ -159,7 +166,17 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
     const overlay = document.getElementById('buzzer-gameover')
     const finalScore = document.getElementById('buzzer-final-score')
+    const gameOverText = document.getElementById('buzzer-gameover-text')
+    
     if (finalScore) finalScore.innerText = score
+    if (gameOverText) {
+      if (score > 5) {
+        gameOverText.innerText = "That's quite the achievement!"
+      } else {
+        gameOverText.innerText = "Better luck next time!"
+      }
+    }
+    
     if (overlay) overlay.classList.add('active')
 
     const btn = document.getElementById('buzzer-play-again')
@@ -173,7 +190,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
     }
   }
 
-  const shootBall = (swipeStrength = 0.5, horizontalOffset = 0) => {
+  const shootBall = (forceMagnitude, upwardForce) => {
     if (!gameActive || !ballTemplate || !readyBallAnchor) return
 
     // Create a new ball in the world
@@ -189,51 +206,44 @@ export const initBuzzerBeaterModule = (uiManager) => {
     readyBall.getWorldPosition(startWorldPos)
     shotBall.position.copy(startWorldPos)
 
-    // Calculate launch trajectory from camera direction
-    const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(xrCamera.quaternion)
+    // Calculate launch trajectory exactly as in A-Frame:
+    // Forward vector pointing in camera direction
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(xrCamera.quaternion)
+    direction.multiplyScalar(forceMagnitude)
     
-    // Project and normalize for horizontal direction
-    const horizontalDir = new THREE.Vector3(cameraDir.x, 0, cameraDir.z).normalize()
-    
-    // Forward force magnitude
-    const launchSpeedForward = THREE.MathUtils.lerp(3.8, 6.2, swipeStrength)
-    const velocity = new THREE.Vector3()
-      .copy(horizontalDir)
-      .multiplyScalar(launchSpeedForward)
+    // Add upward force in world coordinates
+    direction.y += upwardForce
 
-    // Upward launch velocity (creates the shooting arc)
-    velocity.y = THREE.MathUtils.lerp(3.2, 5.5, swipeStrength)
-
-    // Add lateral deflection from horizontal swipe angle
-    const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(xrCamera.quaternion)
-    rightDir.y = 0
-    rightDir.normalize()
-    velocity.addScaledVector(rightDir, horizontalOffset * -3.0)
+    // Spin around the camera's local X-axis
+    const spinAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(xrCamera.quaternion).normalize()
 
     shotBall.userData = {
-      velocity,
+      velocity: direction,
       age: 0,
       scored: false,
       prevPosition: shotBall.position.clone(),
-      spinAxis: new THREE.Vector3(1, 0, 0).applyQuaternion(xrCamera.quaternion).normalize(),
+      spinAxis: spinAxis,
     }
 
     activeBalls.push(shotBall)
 
-    // Animate ready ball scale-pop
-    readyBall.scale.set(0, 0, 0)
-    readyBall.userData.scaleProgress = 0
-    readyBall.userData.animatingScale = true
-    readyBall.visible = false
+    // Trigger ready ball reload animation
+    readyBallProgress = 0.0
+    readyBallAnchor.position.copy(startLocalPos)
+    readyBallAnchor.visible = false
     setTimeout(() => {
-      if (gameActive && readyBall) {
-        readyBall.visible = true
+      if (gameActive && readyBallAnchor) {
+        readyBallAnchor.visible = true
       }
-    }, 150)
+    }, 100)
   }
 
   const updateShotPhysics = (delta) => {
     if (!gameRig) return
+
+    // Hoop center and backboard parameters scaled by 1.1 cabinet scale
+    const hoopCenter = new THREE.Vector3(0, 2.4 * 1.1, -2.5 * 1.1) // (0, 2.64, -2.75)
+    const rimRadius = 0.18 * 1.1 // 0.198m
 
     activeBalls.forEach((ball, index) => {
       // 1. Gravity acceleration
@@ -242,7 +252,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
       // 2. Position updates
       ball.position.addScaledVector(ball.userData.velocity, delta)
 
-      // Apply spin rotation for visual realism
+      // Apply backspin rotation
       ball.rotateOnWorldAxis(ball.userData.spinAxis, delta * 12.0)
 
       // 3. Collision logic in gameRig local coordinate frame
@@ -250,15 +260,15 @@ export const initBuzzerBeaterModule = (uiManager) => {
       const localVel = gameRig.worldToLocal(ball.userData.velocity.clone().add(ball.position)).sub(localPos)
 
       // --- Backboard Collision ---
-      // Local coordinate system dimensions of cabinet backboard:
-      // backboard Z plane is roughly at -2.7m (scaled by 1.1)
-      // boundary X [-0.4, 0.4], Y [2.0, 3.2]
-      if (localPos.z <= -2.7 && localPos.z > -2.95) {
-        if (localPos.x >= -0.44 && localPos.x <= 0.44 && localPos.y >= 2.0 && localPos.y <= 3.2) {
-          // Bounce off backboard: push out of bounds, flip Z velocity
-          localPos.z = -2.7 + (-2.7 - localPos.z)
+      // Backboard plane is at local Z = -2.89 (scaled Z)
+      // Boundaries: X [-0.48, 0.48], Y [2.2, 3.5]
+      // Ball center collides when Z <= -2.89 + BALL_RADIUS = -2.705 and moving in -Z
+      if (localPos.z <= -2.705 && localPos.z > -2.95 && localVel.z < 0) {
+        if (localPos.x >= -0.48 && localPos.x <= 0.48 && localPos.y >= 2.2 && localPos.y <= 3.5) {
+          localPos.z = -2.705
           localVel.z = -localVel.z * 0.45 // restitution
           localVel.x *= 0.8 // friction
+          localVel.y *= 0.8
 
           // Re-project back to world coordinates
           ball.position.copy(gameRig.localToWorld(localPos.clone()))
@@ -267,45 +277,63 @@ export const initBuzzerBeaterModule = (uiManager) => {
         }
       }
 
-      // --- Rim Collision & Scoring ---
-      // Hoop local coordinates: center (0, 2.4, -2.5), radius 0.18 (adjusted for 1.1 cabinet scale)
-      const rimCenter = new THREE.Vector3(0, 2.4, -2.5)
-      const distToRimCenter = Math.hypot(localPos.x - rimCenter.x, localPos.z - rimCenter.z)
-      const prevLocalPos = gameRig.worldToLocal(ball.userData.prevPosition.clone())
-
-      // Did it cross the Y = 2.4 plane downwards?
-      if (prevLocalPos.y >= 2.4 && localPos.y < 2.4) {
-        if (distToRimCenter < 0.17) {
-          // Pure Swish / Score!
-          if (!ball.userData.scored) {
-            ball.userData.scored = true
-            score += 1
-            updateHUD()
-            uiManager.showInstruction('SCORE! 🏀 +1')
-            setTimeout(() => {
-              if (gameActive) uiManager.showInstruction('Swipe up to shoot!')
-            }, 800)
+      // --- Rim Collision (Torus-like ring bounce) ---
+      // Nearest point on the rim wire circle
+      const dx = localPos.x - hoopCenter.x
+      const dz = localPos.z - hoopCenter.z
+      const distToHoopCenterXZ = Math.hypot(dx, dz)
+      
+      if (distToHoopCenterXZ > 0) {
+        // Nearest point on the rim wire circle
+        const rx = hoopCenter.x + (dx / distToHoopCenterXZ) * rimRadius
+        const ry = hoopCenter.y
+        const rz = hoopCenter.z + (dz / distToHoopCenterXZ) * rimRadius
+        
+        const distToRimWire = Math.hypot(localPos.x - rx, localPos.y - ry, localPos.z - rz)
+        
+        // If ball intersects the rim metal wire
+        if (distToRimWire < BALL_RADIUS) {
+          // Normal vector pointing from rim wire center to ball center
+          const normal = new THREE.Vector3(localPos.x - rx, localPos.y - ry, localPos.z - rz).normalize()
+          
+          // Push ball out of collision
+          localPos.copy(normal).multiplyScalar(BALL_RADIUS).add(new THREE.Vector3(rx, ry, rz))
+          
+          // Reflect velocity along normal
+          const dot = localVel.dot(normal)
+          if (dot < 0) {
+            localVel.addScaledVector(normal, -dot * (1 + 0.5)) // 0.5 restitution
           }
-        } else if (distToRimCenter >= 0.17 && distToRimCenter <= 0.22) {
-          // Hit the Rim outer metal hoop! Push it away and bounce it up slightly
-          const bounceDir = new THREE.Vector3(localPos.x - rimCenter.x, 0, localPos.z - rimCenter.z).normalize()
-          localVel.addScaledVector(bounceDir, 2.2) // deflect away
-          localVel.y = Math.abs(localVel.y) * 0.35 // bounce up
-
+          
+          // Re-project back to world
           ball.position.copy(gameRig.localToWorld(localPos.clone()))
           const newWorldVel = gameRig.localToWorld(localVel.clone().add(localPos)).sub(ball.position)
           ball.userData.velocity.copy(newWorldVel)
         }
       }
 
+      // --- Scoring Check ---
+      // Simple 3D distance check to hoop center
+      const worldHoopCenter = gameRig.localToWorld(hoopCenter.clone())
+      const distToGoal = ball.position.distanceTo(worldHoopCenter)
+      
+      if (distToGoal <= 0.2 && !ball.userData.scored) {
+        ball.userData.scored = true
+        score += 1
+        updateHUD()
+        uiManager.showInstruction('SCORE! 🏀 +1')
+        setTimeout(() => {
+          if (gameActive) uiManager.showInstruction('Swipe up to shoot!')
+        }, 800)
+      }
+
       // --- Ground Plane Collision ---
       if (ball.position.y < BALL_RADIUS) {
         ball.position.y = BALL_RADIUS
-        ball.userData.velocity.y = -ball.userData.velocity.y * 0.5 // bounce up
+        ball.userData.velocity.y = -ball.userData.velocity.y * 0.55 // bounce up
         ball.userData.velocity.x *= 0.7 // friction
         ball.userData.velocity.z *= 0.7
 
-        // Stop bouncing once velocity falls below threshold
         if (Math.abs(ball.userData.velocity.y) < 0.5) {
           ball.userData.velocity.set(0, 0, 0)
         }
@@ -324,7 +352,16 @@ export const initBuzzerBeaterModule = (uiManager) => {
   }
 
   const handleTouchStart = (e) => {
-    if (e.cancelable) e.preventDefault()
+    // If the touch is on any UI card/button, let it handle the event
+    if (
+      e.target.tagName === 'BUTTON' || 
+      e.target.closest('#buzzer-introCard') || 
+      e.target.closest('#buzzer-gameover') || 
+      e.target.closest('#back-btn')
+    ) {
+      return
+    }
+    
     if (!gameActive) return
     swipeStart = {
       x: e.touches[0].clientX,
@@ -334,24 +371,34 @@ export const initBuzzerBeaterModule = (uiManager) => {
   }
 
   const handleTouchMove = (e) => {
-    if (e.cancelable) e.preventDefault()
+    // Let default scrolls happen unless swipe starts
   }
 
   const handleTouchEnd = (e) => {
-    if (e.cancelable) e.preventDefault()
     if (!swipeStart || !gameActive) return
 
     const endX = e.changedTouches[0].clientX
     const endY = e.changedTouches[0].clientY
-    const dt = (Date.now() - swipeStart.time) / 1000
+    const duration = Date.now() - swipeStart.time
     const dy = swipeStart.y - endY
     const dx = endX - swipeStart.x
     swipeStart = null
 
-    if (dy > 30 && dt < 1.2) {
-      const swipeStrength = THREE.MathUtils.clamp((dy / Math.max(window.innerHeight * 0.28, 1)) * 0.8, 0, 1)
-      const horizontalOffset = dx / window.innerWidth
-      shootBall(swipeStrength, horizontalOffset)
+    // Require a minimum swipe distance of 30 pixels upwards
+    if (dy > 30 && duration > 0) {
+      const swipeDistance = Math.sqrt(dx * dx + dy * dy)
+      
+      // Exact math from swipe-to-shoot.js:
+      const scaledSwipeDistance = swipeDistance * 0.35
+      const swipeStrength = Math.min(scaledSwipeDistance / duration, 1)
+
+      let forceMagnitude = swipeStrength * 5
+      forceMagnitude = Math.min(forceMagnitude, 5)
+
+      // Upward force max 6.5
+      const upwardForce = Math.min(scaledSwipeDistance * 0.1, 6.5)
+
+      shootBall(forceMagnitude, upwardForce)
     }
   }
 
@@ -391,7 +438,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
       undefined,
       (err) => {
         console.error('[Buzzer] Failed to load arcade.glb:', err)
-        alert('Error loading arcade.glb: ' + (err.message || err))
+        alert('Error loading arcade.glb:\n' + (err.message || err))
       }
     )
 
@@ -407,7 +454,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
       undefined,
       (err) => {
         console.error('[Buzzer] Failed to load new-hoop.glb:', err)
-        alert('Error loading new-hoop.glb: ' + (err.message || err))
+        alert('Error loading new-hoop.glb:\n' + (err.message || err))
       }
     )
 
@@ -476,14 +523,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
       (gltf) => {
         ballTemplate = gltf.scene
         ballTemplate.updateMatrixWorld(true)
-
-        const box = new THREE.Box3().setFromObject(ballTemplate)
-        const size = box.getSize(new THREE.Vector3())
-        const maxDim = Math.max(size.x, size.y, size.z)
-        if (maxDim > 0) {
-          const scale = (BALL_RADIUS * 2) / maxDim
-          ballTemplate.scale.set(scale, scale, scale)
-        }
+        ballTemplate.scale.set(0.58, 0.58, 0.58)
         ballTemplate.traverse((child) => {
           child.frustumCulled = false
         })
@@ -495,15 +535,20 @@ export const initBuzzerBeaterModule = (uiManager) => {
           child.frustumCulled = false
         })
         readyBallAnchor.add(readyBall)
+        
+        // Initial pose matches standard A-Frame creation: starts at local (0, -1, -0.5)
+        readyBallAnchor.position.copy(startLocalPos)
+        readyBallProgress = 0.0 // trigger slide-in animation on start
+        
         xrCamera.add(readyBallAnchor) // ready ball attached to camera
-        updateReadyBallPose()
+        readyBallAnchor.updateMatrixWorld(true)
 
         console.log('[Buzzer] Loaded basketball.glb')
       },
       undefined,
       (err) => {
         console.error('[Buzzer] Failed to load basketball.glb:', err)
-        alert('Error loading basketball.glb: ' + (err.message || err))
+        alert('Error loading basketball.glb:\n' + (err.message || err))
       }
     )
   }
@@ -519,17 +564,17 @@ export const initBuzzerBeaterModule = (uiManager) => {
       const placeNetBtn = document.getElementById('buzzer-place-btn')
       if (placeNetBtn) placeNetBtn.style.display = 'none'
 
-      const canvas = document.getElementById('camerafeed')
-      canvas.addEventListener('touchstart', handleTouchStart, {passive: false})
-      canvas.addEventListener('touchmove', handleTouchMove, {passive: false})
-      canvas.addEventListener('touchend', handleTouchEnd, {passive: false})
+      // Listen on window rather than canvas for swipe event reliability
+      window.addEventListener('touchstart', handleTouchStart, {passive: true})
+      window.addEventListener('touchmove', handleTouchMove, {passive: true})
+      window.addEventListener('touchend', handleTouchEnd, {passive: true})
 
       // Show Onboarding overlay card
       const introCard = document.getElementById('buzzer-introCard')
       if (introCard) {
         introCard.style.display = 'flex'
         
-        // Prevent touches on overlay from bubbling up to A-Frame/XR8 canvas
+        // Prevent touches on overlay from bubbling up to canvas swipe detections
         const preventPropagation = (e) => e.stopPropagation()
         const overlays = [introCard, document.getElementById('buzzer-gameover'), document.getElementById('buzzer-countdownContainer')]
         overlays.forEach(el => {
@@ -555,7 +600,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
         startCountdown()
       }
 
-      uiManager.showInstruction('Initialize tracking and position net...')
+      uiManager.showInstruction('Initialize tracking...')
     },
 
     onUpdate: () => {
@@ -566,22 +611,19 @@ export const initBuzzerBeaterModule = (uiManager) => {
         xrCamera.add(readyBallAnchor)
       }
 
-      // Spatially place cabinet in front of user on first successful track frame
-      if (!placed) placeObjectInFrontOfCamera()
+      // Spatially place cabinet in front of user immediately once camera tracking starts
+      if (!placed && xrCamera) {
+        placeObjectInFrontOfCamera()
+      }
 
       // Update ready ball position/spin/scale
-      if (readyBallAnchor) updateReadyBallPose()
+      if (readyBallAnchor) {
+        updateReadyBallPose(delta)
+      }
+      
       if (gameActive && readyBall) {
-        if (readyBall.userData.animatingScale) {
-          readyBall.userData.scaleProgress += delta / 0.2
-          if (readyBall.userData.scaleProgress >= 1) {
-            readyBall.userData.scaleProgress = 1
-            readyBall.userData.animatingScale = false
-          }
-          const s = readyBall.userData.scaleProgress
-          readyBall.scale.set(s, s, s)
-        }
-        if (activeBalls.length === 0 && !readyBall.userData.animatingScale) {
+        // Slow spin for the ready ball if no active shots in flight, to match original game feel
+        if (activeBalls.length === 0 && readyBallProgress >= 1.0) {
           readyBall.rotation.y += delta * 1.2
         }
       }
@@ -599,12 +641,9 @@ export const initBuzzerBeaterModule = (uiManager) => {
       gameActive = false
       showBuzzerHUD(false)
 
-      const canvas = document.getElementById('camerafeed')
-      if (canvas) {
-        canvas.removeEventListener('touchstart', handleTouchStart)
-        canvas.removeEventListener('touchmove', handleTouchMove)
-        canvas.removeEventListener('touchend', handleTouchEnd)
-      }
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
 
       // Clear world objects
       activeBalls.forEach(b => {
