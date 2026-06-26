@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js'
 
 const BALL_RADIUS = 0.185 * 0.58 // Match A-Frame sphere radius * visual scale (approx 0.11m)
 const GAME_DURATION = 60 // 60 seconds as requested to match classic basketball
@@ -374,6 +375,9 @@ export const initBuzzerBeaterModule = (uiManager) => {
     scene.add(gameRig) // cabinet placed in the world coordinates
 
     const loader = new GLTFLoader()
+    const dracoLoader = new DRACOLoader()
+    dracoLoader.setDecoderPath('https://cdn.8thwall.com/web/aframe/draco-decoder/')
+    loader.setDRACOLoader(dracoLoader)
 
     // 1. Load Arcade Cabinet
     loader.load('basketball-assets/models/arcade.glb', (gltf) => {
