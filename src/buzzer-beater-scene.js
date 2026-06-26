@@ -376,7 +376,7 @@ export const initBuzzerBeaterModule = (uiManager) => {
 
     const loader = new GLTFLoader()
     const dracoLoader = new DRACOLoader()
-    dracoLoader.setDecoderPath('https://cdn.8thwall.com/web/aframe/draco-decoder/')
+    dracoLoader.setDecoderPath('./draco/')
     loader.setDRACOLoader(dracoLoader)
 
     // 1. Load Arcade Cabinet
