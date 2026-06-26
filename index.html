@@ -94,51 +94,75 @@
 
     /* --- Buzzer Beater HUD --- */
     #buzzer-hud {
-      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-      display: none; gap: 20px; align-items: center;
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      height: 50px;
       z-index: 999;
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 1.2rem;
+      color: rgb(255, 255, 255);
+      user-select: none;
       pointer-events: none;
+      font-family: 'Press Start 2P', cursive;
     }
-    .buzzer-stat {
-      background: var(--glass); backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      padding: 8px 16px; border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.12);
-      font-size: 0.85rem; font-weight: 800;
-      text-align: center; min-width: 70px;
+    #buzzer-hud div, #buzzer-hud span {
+      font-family: 'Press Start 2P', cursive;
     }
-    .buzzer-stat .label {
-      font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px;
-      color: rgba(255,255,255,0.5); margin-bottom: 2px;
-    }
-    .buzzer-stat.timer { color: #ff4444; }
-    .buzzer-stat.score { color: var(--cyan); }
 
     #buzzer-gameover {
       position: absolute; inset: 0;
-      background: rgba(0,0,0,0.8); backdrop-filter: blur(6px);
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
       z-index: 1000; display: flex; align-items: center; justify-content: center;
       opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
     }
     #buzzer-gameover.active { opacity: 1; pointer-events: auto; }
     .gameover-card {
-      background: var(--glass-solid);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 24px; padding: 32px; text-align: center;
-      max-width: 300px; width: 85%;
+      width: 80vw;
+      max-width: 300px;
+      background: rgba(16, 31, 62, 1);
+      border-radius: 15px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      color: #fff;
+      font-family: 'Press Start 2P', cursive;
     }
     .gameover-title {
-      font-size: 1.4rem; font-weight: 800; margin-bottom: 8px;
-      color: #ff4444;
+      font-size: 1.8rem;
+      font-weight: bold;
+      margin-bottom: 20px;
+      color: #fff;
+      font-family: 'Press Start 2P', cursive;
     }
-    .gameover-score {
-      font-size: 2.4rem; font-weight: 800; color: var(--cyan);
-      margin: 12px 0 4px;
+    .gameover-score-wrap {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.9rem;
+      line-height: 1.6;
     }
-    .gameover-label {
-      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px;
-      color: rgba(255,255,255,0.5); margin-bottom: 24px;
+    .gameover-score-wrap span {
+      font-family: 'Press Start 2P', cursive;
+    }
+    #buzzer-play-again {
+      width: 190px;
+      background: #ff4713;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      height: 50px;
+      font-size: 1.0rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      margin-top: 40px;
+      font-family: 'Press Start 2P', cursive;
     }
 
     /* --- Buzzer Beater Onboarding Overlay --- */
@@ -146,19 +170,19 @@
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%) scale(0.85);
       width: 80vw;
       max-width: 400px;
-      background: var(--glass-solid);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 24px;
-      padding: 32px;
+      background: rgba(16, 31, 62, 1);
+      border-radius: 15px;
+      padding: 40px;
       text-align: center;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 990;
+      color: #fff;
     }
     #buzzer-cardContainer {
       width: 100%;
@@ -172,6 +196,18 @@
       max-width: 250px;
       margin-bottom: 16px;
     }
+    #buzzer-begin-btn {
+      width: 190px;
+      background: #ff4713;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      height: 50px;
+      font-size: 1.0rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      font-weight: bold;
+    }
     #buzzer-countdownContainer {
       position: absolute;
       inset: 0;
@@ -183,10 +219,10 @@
       pointer-events: none;
     }
     #buzzer-countdown {
-      font-size: 5rem;
-      font-weight: 800;
+      font-size: 4rem;
       color: #fff;
-      text-shadow: 0 0 20px rgba(0,242,254,0.6);
+      font-family: 'Press Start 2P', cursive;
+      text-shadow: 0 0 10px rgba(255,255,255,0.8);
     }
 
     /* --- HUD --- */
@@ -316,7 +352,7 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/main-B3i741kP.js"></script>
+  <script type="module" crossorigin src="./assets/main-CLSN8tUa.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-Dezn_h7o.js">
 </head>
 <body>
@@ -446,23 +482,19 @@
 
   <!-- Buzzer Beater HUD -->
   <div id="buzzer-hud">
-    <div class="buzzer-stat timer">
-      <div class="label">Time</div>
-      <div id="buzzer-timer">20s</div>
-    </div>
-    <div class="buzzer-stat score">
-      <div class="label">Score</div>
-      <div id="buzzer-score">0</div>
-    </div>
+    <div>SCORE:<span id="buzzer-score">0</span></div>
+    <div>0:<span id="buzzer-timer">60</span></div>
   </div>
 
   <!-- Buzzer Beater Game Over -->
   <div id="buzzer-gameover">
     <div class="gameover-card">
-      <div class="gameover-title">TIME'S UP!</div>
-      <div class="gameover-score" id="buzzer-final-score">0</div>
-      <div class="gameover-label">Points Scored</div>
-      <button class="btn-primary" id="buzzer-play-again">Play Again</button>
+      <div class="gameover-title">GAME OVER</div>
+      <p class="gameover-score-wrap" style="margin: auto; margin-right: 10%; margin-left: 10%; line-height: 1.8;">
+        You scored <span id="buzzer-final-score">0</span> times <br />
+        <span id="buzzer-gameover-text">Better luck next time!</span>
+      </p>
+      <button id="buzzer-play-again">PLAY AGAIN</button>
     </div>
   </div>
 
