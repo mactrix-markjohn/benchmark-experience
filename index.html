@@ -141,6 +141,54 @@
       color: rgba(255,255,255,0.5); margin-bottom: 24px;
     }
 
+    /* --- Buzzer Beater Onboarding Overlay --- */
+    #buzzer-introCard {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80vw;
+      max-width: 400px;
+      background: var(--glass-solid);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 24px;
+      padding: 32px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 990;
+    }
+    #buzzer-cardContainer {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #buzzer-introImg {
+      width: 60vw;
+      max-width: 250px;
+      margin-bottom: 16px;
+    }
+    #buzzer-countdownContainer {
+      position: absolute;
+      inset: 0;
+      z-index: 990;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.45);
+      pointer-events: none;
+    }
+    #buzzer-countdown {
+      font-size: 5rem;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 0 20px rgba(0,242,254,0.6);
+    }
+
     /* --- HUD --- */
     #score-pill {
       position: absolute; top: 16px; right: 16px;
@@ -268,7 +316,7 @@
       text-decoration: underline; margin-top: 4px;
     }
   </style>
-  <script type="module" crossorigin src="./assets/main-Wh_cLf2A.js"></script>
+  <script type="module" crossorigin src="./assets/main-BvNAQNig.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-Dezn_h7o.js">
 </head>
 <body>
@@ -360,8 +408,8 @@
       </div>
       <div class="menu-card buzzer" id="buzzer-card" style="display: none;">
         <div class="menu-card-icon">🏀</div>
-        <div class="menu-card-title">Buzzer Beater</div>
-        <div class="menu-card-desc">Shoot basketballs into a virtual hoop on the floor! (Three.js)</div>
+        <div class="menu-card-title">Basketball Classic</div>
+        <div class="menu-card-desc">Shoot basketballs into the classic 8thWall arcade machine! (Three.js)</div>
       </div>
       <div class="menu-card buzzer" id="arcade-card" style="display: none;">
         <div class="menu-card-icon">🎰</div>
@@ -416,6 +464,34 @@
       <div class="gameover-label">Points Scored</div>
       <button class="btn-primary" id="buzzer-play-again">Play Again</button>
     </div>
+  </div>
+
+
+  <!-- Buzzer Beater Onboarding Screen -->
+  <div id="buzzer-introCard" style="display: none;">
+    <div id="buzzer-cardContainer">
+      <img id="buzzer-introImg" src="basketball-assets/onboarding/logo.png" />
+      <p style="font-size: 1.1rem; margin: 16px auto; width: 85%;">
+        Swipe to throw basketballs. Score as many times as you can in 60 seconds.
+      </p>
+      <p style="font-size: 0.9rem; color: #aaa; margin-top: 0; line-height: 1.4;">
+        While using AR, make sure <br />
+        you’re in a safe location at all times.
+      </p>
+      <button class="btn-primary" id="buzzer-begin-btn" style="max-width: 200px; margin-top: 16px;">PLAY</button>
+    </div>
+  </div>
+
+  <!-- Buzzer Beater Countdown Screen -->
+  <div id="buzzer-countdownContainer" style="display: none;">
+    <h1 id="buzzer-countdown">3</h1>
+  </div>
+
+  <!-- Hidden video elements for Three.js VideoTexture -->
+  <div style="display: none;">
+    <video id="neon-video" muted autoplay playsinline loop src="./basketball-assets/videos/neon.mp4" crossorigin="anonymous"></video>
+    <video id="portal-video" muted autoplay playsinline loop src="./basketball-assets/videos/portal-video.mp4" crossorigin="anonymous"></video>
+    <video id="play-video" muted autoplay playsinline loop src="./basketball-assets/videos/play.mp4" crossorigin="anonymous"></video>
   </div>
 
   <!-- Shutter -->
