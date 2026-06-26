@@ -59,8 +59,8 @@ export class UIManager {
       if (this.mascotCard) this.mascotCard.style.display = 'none'
       if (this.maskCard) this.maskCard.style.display = 'none'
       if (this.buzzerCard) this.buzzerCard.style.display = 'block'
-      if (this.arcadeCard) this.arcadeCard.style.display = 'block'
-      if (this.classicCard) this.classicCard.style.display = 'block'
+      if (this.arcadeCard) this.arcadeCard.style.display = 'none'
+      if (this.classicCard) this.classicCard.style.display = 'none'
     }
   }
 
